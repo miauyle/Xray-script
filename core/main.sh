@@ -323,6 +323,41 @@ function processes_full_installation() {
 # 返回值: 无 (通过调用其他函数和脚本执行操作)
 # =============================================================================
 
+function select_routing_rule_tag() {
+    exec_menu '--route-rule-types'
+    local choose=$(echo $?)
+    case ${choose} in
+    1) echo 'block-ip' ;;
+    2) echo 'block-domain' ;;
+    3) echo 'warp-ip' ;;
+    4) echo 'warp-domain' ;;
+    *) return 1 ;;
+    esac
+}
+
+function processes_routing_rules() {
+    exec_menu '--route-rules'
+    local choose=$(echo $?)
+    local rule_tag=''
+
+    case ${choose} in
+    1)
+        exec_handler '--routing-manage' 'list'
+        ;;
+    2)
+        rule_tag="$(select_routing_rule_tag)" || return 0
+        exec_handler '--routing-manage' 'delete' "${rule_tag}"
+        ;;
+    3)
+        rule_tag="$(select_routing_rule_tag)" || return 0
+        exec_handler '--routing-manage' 'clear' "${rule_tag}"
+        ;;
+    *)
+        return 0
+        ;;
+    esac
+}
+
 function processes_routing() {
     # 显示路由规则菜单
     exec_menu '--route'
@@ -336,6 +371,10 @@ function processes_routing() {
     4) exec_handler '--routing' 'block' 'domain' ;; # 选择 4：配置阻止 Domain 规则
     5) exec_handler '--routing' 'warp' 'ip' ;;      # 选择 5：配置 WARP IP 规则
     6) exec_handler '--routing' 'warp' 'domain' ;;  # 选择 6：配置 WARP Domain 规则
+    7)
+        processes_routing_rules
+        return 0
+        ;;
     *) exit 0 ;;                                    # 其他情况：退出脚本
     esac
     exec_handler '--restart' # 重启 Xray 服务
