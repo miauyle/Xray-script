@@ -117,7 +117,9 @@
       "info5": "添加关于 ip 的屏蔽分流, 相关分流添加在 ruleTag 为 block-ip 中",
       "info6": "添加关于 domain 的屏蔽分流, 相关分流添加在 ruleTag 为 block-domain 中",
       "info7": "(需要开启 WARP)添加关于 ip 的 WARP 分流, 相关分流添加在 ruleTag 为 warp-ip 中",
-      "info8": "(需要开启 WARP)添加关于 domain 的 WARP 分流, 相关分流添加在 ruleTag 为 warp-domain 中"
+      "info8": "(需要开启 WARP)添加关于 domain 的 WARP 分流, 相关分流添加在 ruleTag 为 warp-domain 中",
+      "option7": "管理现有分流规则",
+      "info9": "查看、删除单项或清空 block/WARP 的 ip/domain 自定义规则"
     },
     "sni_config": {
       "title": "SNI 配置",
@@ -145,6 +147,18 @@
       "info2": "新增独立证书和独立反代站点",
       "info3": "支持修改域名或上游地址",
       "info4": "删除站点配置、证书与续签记录"
+    },
+    "route_rule_management": {
+      "title": "现有分流规则管理",
+      "option1": "查看全部自定义分流规则",
+      "option2": "删除单条规则",
+      "option3": "清空一组规则",
+      "info1": "仅显示 block-ip、block-domain、warp-ip、warp-domain，不修改系统规则",
+      "info2": "选择规则组后按编号删除单条规则",
+      "info3": "选择规则组后清空该组全部规则"
+    },
+    "route_rule_types": {
+      "title": "选择规则组"
     }
   },
   "handler": {
@@ -178,6 +192,15 @@
     },
     "sni": {
       "port_guard_fail": "SNI 初始化已停止：必需端口检查未通过"
+    },
+    "routing": {
+      "empty": "(空)",
+      "delete_prompt": "请输入要删除的规则编号: ",
+      "invalid_index": "规则编号无效",
+      "deleted": "规则已删除，Xray 已重新加载配置",
+      "clear_prompt": "确认清空规则组",
+      "cleared": "规则组已清空，Xray 已重新加载配置",
+      "cancelled": "操作已取消"
     }
   },
   "read": {
