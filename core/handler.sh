@@ -611,8 +611,21 @@ function get_custom_site_json_by_index() {
 function add_rule() {
     local rule_tag=$1     # 获取规则标签
     local domain_or_ip=$2 # 获取规则类型 (domain/ip)
-    # 将逗号分隔的值转换为 JSON 数组
-    local value=$(echo "$3" | tr ',' '\n' | jq -R | jq -s)
+    # 将逗号分隔的值转换为 JSON 数组：
+    # 去除首尾空白、丢弃空元素并去重，避免生成 [""] 之类的无效规则。
+    local value
+    value="$(
+        printf '%s' "$3" |
+            tr ',' '\n' |
+            sed 's/^[[:space:]]*//;s/[[:space:]]*$//' |
+            awk 'NF' |
+            jq -R . |
+            jq -s 'unique'
+    )"
+    # 空输入或只包含逗号/空白时，不允许写入 routing.rules。
+    if [[ "$(echo "${value}" | jq 'length')" -eq 0 ]]; then
+        _error "Routing rule cannot be empty"
+    fi
     local outboundTag=$4 # 获取出站标签
     local position=$5    # 获取插入位置参数
     local target_tag=$6  # 获取目标规则标签参数
@@ -668,8 +681,25 @@ function add_rule() {
             fi
         fi
     fi
-    # 将更新后的 Xray 配置写入文件
-    echo "${XRAY_CONFIG}" >"${XRAY_CONFIG_PATH}" && sleep 2
+    # 写入正式配置前先校验候选配置。
+    # 校验失败时保留原配置，避免重启后 Xray 无法启动。
+    local temp_config
+    temp_config="$(mktemp "${XRAY_CONFIG_PATH}.tmp.XXXXXX")" || _error "Failed to create temporary Xray config"
+    printf '%s\n' "${XRAY_CONFIG}" >"${temp_config}"
+
+    if ! xray run -test -format=json -c "${temp_config}" >/dev/null 2>&1; then
+        rm -f "${temp_config}"
+        XRAY_CONFIG="$(jq '.' "${XRAY_CONFIG_PATH}")"
+        _error "Xray configuration validation failed; original config was kept"
+    fi
+
+    if ! cat "${temp_config}" >"${XRAY_CONFIG_PATH}"; then
+        rm -f "${temp_config}"
+        _error "Failed to write Xray configuration"
+    fi
+
+    rm -f "${temp_config}"
+    sleep 2
 }
 
 # =============================================================================
@@ -698,7 +728,7 @@ function handler_routing() {
     # 调用 exec_read 读取用户输入的规则值
     exec_read "${rule_tag}"
     # 调用 add_rule 将规则添加到 Xray 配置中
-    add_rule "${rule_tag}" "${rule_target}" "${XRAY_CONFIG[${rule_tag}]}" "${rule_type}"
+    add_rule "${rule_tag}" "${rule_target}" "${CONFIG_DATA[${rule_tag}]}" "${rule_type}"
 }
 
 # =============================================================================

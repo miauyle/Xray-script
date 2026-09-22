@@ -2,7 +2,7 @@
 # =============================================================================
 # 注释: 通过 Qwen3-Coder 生成。
 # 脚本名称: install.sh
-# 脚本仓库: https://github.com/zxcvos/Xray-script
+# 脚本仓库: https://github.com/miauyle/Xray-script
 # 功能描述: Xray-script 项目的安装引导脚本。
 #           负责检查和安装系统依赖、下载项目文件、处理命令行参数、
 #           初始化配置、设置语言以及启动主菜单。
@@ -45,6 +45,8 @@ readonly CUR_FILE="$(basename "$0")"                          # 当前脚本文�
 # 定义配置文件和相关目录的路径
 readonly SCRIPT_CONFIG_DIR="${HOME}/.xray-script"              # 主配置文件目录
 readonly SCRIPT_CONFIG_PATH="${SCRIPT_CONFIG_DIR}/config.json" # 脚本主配置文件路径
+readonly SCRIPT_REPOSITORY="miauyle/Xray-script"                 # 当前维护仓库
+readonly SCRIPT_BRANCH="main"                                   # 当前维护分支
 
 # --- 全局变量声明 ---
 # 声明用于存储国际化数据、项目根目录和快速安装选项的全局变量
@@ -404,7 +406,7 @@ function download_github_files() {
 function download_xray_script_files() {
     local target_dir="$1" # 本地目标根目录
     # 定义 GitHub API 项目 URL
-    local script_github_api="https://api.github.com/repos/zxcvos/xray-script/tarball/main"
+    local script_github_api="https://api.github.com/repos/${SCRIPT_REPOSITORY}/tarball/${SCRIPT_BRANCH}"
 
     # 调用 download_github_files 下载项目
     download_github_files "${target_dir}" "${script_github_api}"
@@ -419,7 +421,7 @@ function download_xray_script_files() {
 # =============================================================================
 function check_xray_script_version() {
     # 定义 GitHub API URL 和本地版本文件路径
-    local script_config_github_url="https://raw.githubusercontent.com/zxcvos/Xray-script/main/config.json"
+    local script_config_github_url="https://raw.githubusercontent.com/${SCRIPT_REPOSITORY}/${SCRIPT_BRANCH}/config.json"
     local is_update='n' # 初始化更新标志为 'n' (不更新)
 
     # 读取本地版本号
@@ -520,7 +522,7 @@ function main() {
         mkdir -p "${SCRIPT_CONFIG_DIR}"
     fi
     if [[ ! -f "${SCRIPT_CONFIG_PATH}" ]]; then
-        wget -O "${SCRIPT_CONFIG_PATH}" https://raw.githubusercontent.com/zxcvos/Xray-script/main/config.json
+        wget -O "${SCRIPT_CONFIG_PATH}" "https://raw.githubusercontent.com/${SCRIPT_REPOSITORY}/${SCRIPT_BRANCH}/config.json"
     fi
 
     # 处理命令行参数中的快速安装和自定义目录选项
