@@ -687,7 +687,7 @@ function add_rule() {
     temp_config="$(mktemp "${XRAY_CONFIG_PATH}.tmp.XXXXXX")" || _error "Failed to create temporary Xray config"
     printf '%s\n' "${XRAY_CONFIG}" >"${temp_config}"
 
-    if ! xray run -test -c "${temp_config}" >/dev/null 2>&1; then
+    if ! xray run -test -format=json -c "${temp_config}" >/dev/null 2>&1; then
         rm -f "${temp_config}"
         XRAY_CONFIG="$(jq '.' "${XRAY_CONFIG_PATH}")"
         _error "Xray configuration validation failed; original config was kept"
