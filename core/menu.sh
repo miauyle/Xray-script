@@ -329,7 +329,9 @@ function menu_route() {
     # 打印选项 5
     echo -e "${GREEN}5.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.route_management.option5")"
     # 打印选项 6
-    echo -e "${GREEN}5.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.route_management.option6")"
+    echo -e "${GREEN}6.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.route_management.option6")"
+    # 打印选项 7
+    echo -e "${GREEN}7.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.route_management.option7")"
 
     # 打印分隔线
     echo -e "------------------------------------------------------"
@@ -347,7 +349,30 @@ function menu_route() {
     echo -e "5. $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.route_management.info7")"
     # 打印选项 6 的说明信息
     echo -e "6. $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.route_management.info8")"
+    # 打印选项 7 的说明信息
+    echo -e "7. $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.route_management.info9")"
     # 打印分隔线
+    echo -e "------------------------------------------------------"
+}
+
+function menu_route_rules() {
+    echo -e "------------------ $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.route_rule_management.title") ------------------"
+    echo -e "${GREEN}1.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.route_rule_management.option1")"
+    echo -e "${GREEN}2.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.route_rule_management.option2")"
+    echo -e "${GREEN}3.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.route_rule_management.option3")"
+    echo -e "------------------------------------------------------"
+    echo -e "1. $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.route_rule_management.info1")"
+    echo -e "2. $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.route_rule_management.info2")"
+    echo -e "3. $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.route_rule_management.info3")"
+    echo -e "------------------------------------------------------"
+}
+
+function menu_route_rule_types() {
+    echo -e "------------------ $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.route_rule_types.title") ------------------"
+    echo -e "${GREEN}1.${NC} block-ip"
+    echo -e "${GREEN}2.${NC} block-domain"
+    echo -e "${GREEN}3.${NC} warp-ip"
+    echo -e "${GREEN}4.${NC} warp-domain"
     echo -e "------------------------------------------------------"
 }
 
@@ -524,6 +549,8 @@ function main() {
     --ca) menu_ca_vendor >&2 ;;
     --management) menu_config >&2 ;;      # 显示配置管理菜单
     --route) menu_route >&2 ;;            # 显示路由管理菜单
+    --route-rules) menu_route_rules >&2 ;;
+    --route-rule-types) menu_route_rule_types >&2 ;;
     --sni) menu_sni_config >&2 ;;         # 显示 SNI 配置菜单
     --custom-sites) menu_custom_sites >&2 ;;
     --banner) print_banner >&2 ;;         # 显示 Banner
