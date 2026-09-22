@@ -807,7 +807,10 @@ function handler_routing_rule_delete() {
 
     local choice
     read -r choice
-    if [[ ! "${choice}" =~ ^[0-9]+$ || "${choice}" -lt 1 || "${choice}" -gt "${count}" ]]; then
+    if [[ ! "${choice}" =~ ^[0-9]+$ ]]; then
+        _error "$(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.routing.invalid_index")"
+    fi
+    if ((choice < 1 || choice > count)); then
         _error "$(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.routing.invalid_index")"
     fi
 
