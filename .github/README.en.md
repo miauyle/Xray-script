@@ -55,6 +55,11 @@
 
 ## Changelog
 
+4. v2026.09.23 fixes custom routing rule writes and hardens Xray config updates.
+   1. Fixes WARP/block routing input being read from `XRAY_CONFIG` instead of `CONFIG_DATA`, which could turn a valid domain into an empty string entry.
+   2. Routing input now trims whitespace, drops empty values, and deduplicates entries; empty rules are rejected.
+   3. Candidate Xray configs are validated before replacing the live config; validation failure keeps the existing config unchanged.
+   4. Installation, update, and config download URLs now stay on `miauyle/Xray-script`.
 1. v2025.11.19 resolves the issue where WARP was enabled without log limits, causing container logs to keep growing and eventually fill up disk space.
    1. Users who already enabled WARP routing can select 【Reset WARP Proxy】 in 【Manage Configuration】 -> 【Routing Management】 to clear container logs and reset WARP Proxy.
    2. Log limits have been added; just enable WARP directly when needed.
