@@ -592,6 +592,30 @@ function get_custom_site_json_by_index() {
 }
 
 # =============================================================================
+# 函数名称: persist_xray_config
+# 功能描述: 校验候选 Xray 配置并安全写入正式配置文件。
+# =============================================================================
+function persist_xray_config() {
+    local temp_config
+    temp_config="$(mktemp "${XRAY_CONFIG_PATH}.tmp.XXXXXX")" || _error "Failed to create temporary Xray config"
+    printf '%s\n' "${XRAY_CONFIG}" >"${temp_config}"
+
+    if ! xray run -test -format=json -c "${temp_config}" >/dev/null 2>&1; then
+        rm -f "${temp_config}"
+        XRAY_CONFIG="$(jq '.' "${XRAY_CONFIG_PATH}")"
+        _error "Xray configuration validation failed; original config was kept"
+    fi
+
+    if ! cat "${temp_config}" >"${XRAY_CONFIG_PATH}"; then
+        rm -f "${temp_config}"
+        _error "Failed to write Xray configuration"
+    fi
+
+    rm -f "${temp_config}"
+    sleep 2
+}
+
+# =============================================================================
 # 函数名称: add_rule
 # 功能描述: 在 Xray 配置的 routing.rules 中添加或更新路由规则。
 #           1. 检查是否存在具有相同 ruleTag 的规则。
@@ -681,25 +705,8 @@ function add_rule() {
             fi
         fi
     fi
-    # 写入正式配置前先校验候选配置。
-    # 校验失败时保留原配置，避免重启后 Xray 无法启动。
-    local temp_config
-    temp_config="$(mktemp "${XRAY_CONFIG_PATH}.tmp.XXXXXX")" || _error "Failed to create temporary Xray config"
-    printf '%s\n' "${XRAY_CONFIG}" >"${temp_config}"
-
-    if ! xray run -test -format=json -c "${temp_config}" >/dev/null 2>&1; then
-        rm -f "${temp_config}"
-        XRAY_CONFIG="$(jq '.' "${XRAY_CONFIG_PATH}")"
-        _error "Xray configuration validation failed; original config was kept"
-    fi
-
-    if ! cat "${temp_config}" >"${XRAY_CONFIG_PATH}"; then
-        rm -f "${temp_config}"
-        _error "Failed to write Xray configuration"
-    fi
-
-    rm -f "${temp_config}"
-    sleep 2
+    # 使用统一的校验与安全写入流程保存配置。
+    persist_xray_config
 }
 
 # =============================================================================
@@ -729,6 +736,144 @@ function handler_routing() {
     exec_read "${rule_tag}"
     # 调用 add_rule 将规则添加到 Xray 配置中
     add_rule "${rule_tag}" "${rule_target}" "${CONFIG_DATA[${rule_tag}]}" "${rule_type}"
+}
+
+function routing_rule_field() {
+    case "$1" in
+    block-ip | warp-ip) echo 'ip' ;;
+    block-domain | warp-domain) echo 'domain' ;;
+    *) return 1 ;;
+    esac
+}
+
+function load_current_xray_config() {
+    XRAY_CONFIG="$(jq '.' "${XRAY_CONFIG_PATH}")" || _error "Failed to read Xray configuration"
+}
+
+function print_routing_rule_group() {
+    local rule_tag="$1"
+    local field=''
+    field="$(routing_rule_field "${rule_tag}")" || _error "Unsupported routing rule: ${rule_tag}"
+
+    local values
+    values="$(echo "${XRAY_CONFIG}" | jq -r --arg ruleTag "${rule_tag}" --arg field "${field}" '
+        .routing.rules[]?
+        | select(.ruleTag == $ruleTag)
+        | (.[$field] // [])[]?
+        | select(length > 0)
+    ')"
+
+    echo -e "${GREEN}[${rule_tag}]${NC}"
+    if [[ -z "${values}" ]]; then
+        echo "  $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.routing.empty")"
+        return 0
+    fi
+
+    local index=1
+    while IFS= read -r value; do
+        [[ -z "${value}" ]] && continue
+        printf '  %d. %s\n' "${index}" "${value}"
+        ((index++))
+    done <<<"${values}"
+}
+
+function handler_routing_rule_list() {
+    load_current_xray_config
+    local rule_tag
+    for rule_tag in block-ip block-domain warp-ip warp-domain; do
+        print_routing_rule_group "${rule_tag}"
+    done
+}
+
+function handler_routing_rule_delete() {
+    local rule_tag="$1"
+    local field=''
+    field="$(routing_rule_field "${rule_tag}")" || _error "Unsupported routing rule: ${rule_tag}"
+
+    load_current_xray_config
+
+    local count
+    count="$(echo "${XRAY_CONFIG}" | jq --arg ruleTag "${rule_tag}" --arg field "${field}" '
+        [.routing.rules[]? | select(.ruleTag == $ruleTag) | (.[$field] // [])[]? | select(length > 0)] | length
+    ')"
+
+    if [[ "${count}" -eq 0 ]]; then
+        print_routing_rule_group "${rule_tag}"
+        return 0
+    fi
+
+    print_routing_rule_group "${rule_tag}"
+    printf "%s" "$(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.routing.delete_prompt")" >&2
+
+    local choice
+    read -r choice
+    if [[ ! "${choice}" =~ ^[0-9]+$ || "${choice}" -lt 1 || "${choice}" -gt "${count}" ]]; then
+        _error "$(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.routing.invalid_index")"
+    fi
+
+    local index=$((choice - 1))
+    XRAY_CONFIG="$(echo "${XRAY_CONFIG}" | jq         --arg ruleTag "${rule_tag}"         --arg field "${field}"         --argjson index "${index}" '
+        .routing.rules |= map(
+            if .ruleTag == $ruleTag then
+                .[$field] = ((.[$field] // []) | map(select(length > 0)) | del(.[$index]))
+            else
+                .
+            end
+        )
+        | .routing.rules |= map(
+            select(.ruleTag != $ruleTag or ((.[$field] // []) | length > 0))
+        )
+    ')"
+
+    persist_xray_config
+    handler_restart
+    echo -e "${GREEN}[$(echo "$I18N_DATA" | jq -r '.title.info')]${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.routing.deleted")"
+}
+
+function handler_routing_rule_clear() {
+    local rule_tag="$1"
+    local field=''
+    field="$(routing_rule_field "${rule_tag}")" || _error "Unsupported routing rule: ${rule_tag}"
+
+    load_current_xray_config
+
+    local count
+    count="$(echo "${XRAY_CONFIG}" | jq --arg ruleTag "${rule_tag}" --arg field "${field}" '
+        [.routing.rules[]? | select(.ruleTag == $ruleTag) | (.[$field] // [])[]? | select(length > 0)] | length
+    ')"
+
+    if [[ "${count}" -eq 0 ]]; then
+        print_routing_rule_group "${rule_tag}"
+        return 0
+    fi
+
+    print_routing_rule_group "${rule_tag}"
+    printf "%s [y/N]: " "$(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.routing.clear_prompt") ${rule_tag}" >&2
+
+    local confirm
+    read -r confirm
+    case "${confirm,,}" in
+    y | yes)
+        XRAY_CONFIG="$(echo "${XRAY_CONFIG}" | jq --arg ruleTag "${rule_tag}" '
+            .routing.rules |= map(select(.ruleTag != $ruleTag))
+        ')"
+        persist_xray_config
+        handler_restart
+        echo -e "${GREEN}[$(echo "$I18N_DATA" | jq -r '.title.info')]${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.routing.cleared")"
+        ;;
+    *)
+        echo "$(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.routing.cancelled")"
+        ;;
+    esac
+}
+
+function handler_routing_manage() {
+    case "$1" in
+    list) handler_routing_rule_list ;;
+    delete) handler_routing_rule_delete "$2" ;;
+    clear) handler_routing_rule_clear "$2" ;;
+    *) _error "Unsupported routing management action: $1" ;;
+    esac
 }
 
 # =============================================================================
@@ -2192,6 +2337,7 @@ function main() {
         ;;
     --sni-ports) handler_check_sni_ports ;;
     --routing) handler_routing "$@" ;; # 处理路由规则
+    --routing-manage) handler_routing_manage "$@" ;; # 管理已有路由规则
     --change-domain)
         handler_change_domain "$1" # 处理域名配置
         handler_xray_config        # 更新 Xray 配置
