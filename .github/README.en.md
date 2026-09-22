@@ -135,7 +135,7 @@ In SNI configuration, CDN share links use H2 as default ALPN. If you need H3, mo
   / . \  | |  | |    | |       | |    | |     
  /_/ \_\ |_|  |_|    |_|       |_|    |_|     
 
-Copyright (C) zxcvos | https://github.com/zxcvos/Xray-script
+Maintained by miauyle | https://github.com/miauyle/Xray-script
 
 -------------------------------------------
 Xray       : v25.7.26
