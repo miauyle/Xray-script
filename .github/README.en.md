@@ -55,6 +55,11 @@
 
 ## Changelog
 
+5. v2026.09.23.1 adds management for existing custom routing rules.
+   1. Lists `block-ip`, `block-domain`, `warp-ip`, and `warp-domain` custom rules.
+   2. Deletes individual entries by index and removes an empty rule group automatically.
+   3. Clears an entire custom rule group with confirmation.
+   4. Delete/clear changes are validated by Xray before the live config is replaced and the service is restarted.
 4. v2026.09.23 fixes custom routing rule writes and hardens Xray config updates.
    1. Fixes WARP/block routing input being read from `XRAY_CONFIG` instead of `CONFIG_DATA`, which could turn a valid domain into an empty string entry.
    2. Routing input now trims whitespace, drops empty values, and deduplicates entries; empty rules are rejected.
