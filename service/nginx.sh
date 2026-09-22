@@ -2,11 +2,11 @@
 # =============================================================================
 # 注释: 通过 Qwen3-Coder 生成。
 # 脚本名称: nginx.sh
-# 脚本仓库: https://github.com/zxcvos/Xray-script
+# 脚本仓库: https://github.com/miauyle/Xray-script
 # 功能描述: 用于从源代码编译、安装、更新和卸载 Nginx 的脚本。
 #           支持集成最新版 OpenSSL 和可选的 Brotli 压缩模块。
 #           负责管理 Nginx 的 systemd 服务配置。
-# 作者: zxcvos
+# 维护者: miauyle
 # 时间: 2025-07-25
 # 版本: 1.0.0
 # 依赖: bash, curl, wget, git, gcc, make, awk, grep, sed, sort, tr, systemctl, jq,

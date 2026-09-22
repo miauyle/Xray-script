@@ -3,7 +3,7 @@
 # Copyright (C) 2025 zxcvos
 #
 # Xray-script:
-#   https://github.com/zxcvos/Xray-script
+#   https://github.com/miauyle/Xray-script
 # =============================================================================
 # 注释: 通过 Qwen3-Coder 生成。
 # 脚本名称: handler.sh
@@ -11,7 +11,7 @@
 #           负责执行具体的操作，如安装/卸载 Xray/Nginx、配置文件生成、
 #           启动/停止服务、管理 Docker 容器、处理路由规则等。
 #           由 main.sh 调用，根据传入参数执行相应功能。
-# 作者: zxcvos
+# 维护者: miauyle
 # 时间: 2025-07-25
 # 版本: 1.0.0
 # 依赖: bash, jq, curl, systemctl, crontab, sed, awk, grep, cut, tr

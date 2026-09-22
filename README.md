@@ -54,6 +54,10 @@
 
 ## 更新日志
 
+6. v2026.09.23.2 统一 fork 的维护者与仓库展示信息。
+   1. README 与终端 Banner 改为显示 `miauyle/Xray-script`。
+   2. 脚本头部的仓库/维护者元数据改为当前 fork。
+   3. 原始 MIT 版权声明继续保留在 LICENSE 与必要的版权声明中。
 5. v2026.09.23.1 新增现有分流规则管理。
    1. 支持查看 `block-ip`、`block-domain`、`warp-ip`、`warp-domain` 四类自定义规则。
    2. 支持按编号删除单条规则，规则组为空时自动移除对应 ruleTag。
@@ -134,7 +138,7 @@ SNI 配置中，CDN 的分享链接 Alpn 默认为 H2，如有 H3 需求，请�
   / . \  | |  | |    | |       | |    | |     
  /_/ \_\ |_|  |_|    |_|       |_|    |_|     
 
-Copyright (C) zxcvos | https://github.com/zxcvos/Xray-script
+Maintained by miauyle | https://github.com/miauyle/Xray-script
 
 -------------------------------------------
 Xray       : v25.7.26

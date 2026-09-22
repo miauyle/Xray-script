@@ -55,6 +55,10 @@
 
 ## Changelog
 
+6. v2026.09.23.2 aligns the fork's maintainer and repository branding.
+   1. README and terminal banners now display `miauyle/Xray-script`.
+   2. Script repository/maintainer metadata now points to the current fork.
+   3. Original MIT copyright notices remain preserved in LICENSE and required copyright notices.
 5. v2026.09.23.1 adds management for existing custom routing rules.
    1. Lists `block-ip`, `block-domain`, `warp-ip`, and `warp-domain` custom rules.
    2. Deletes individual entries by index and removes an empty rule group automatically.
@@ -135,7 +139,7 @@ In SNI configuration, CDN share links use H2 as default ALPN. If you need H3, mo
   / . \  | |  | |    | |       | |    | |     
  /_/ \_\ |_|  |_|    |_|       |_|    |_|     
 
-Copyright (C) zxcvos | https://github.com/zxcvos/Xray-script
+Maintained by miauyle | https://github.com/miauyle/Xray-script
 
 -------------------------------------------
 Xray       : v25.7.26
