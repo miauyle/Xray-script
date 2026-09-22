@@ -117,7 +117,9 @@
       "info5": "Add IP-based block route to ruleTag block-ip.",
       "info6": "Add domain-based block route to ruleTag block-domain.",
       "info7": "(WARP must be enabled) Add WARP IP route to ruleTag warp-ip.",
-      "info8": "(WARP must be enabled) Add WARP domain route to ruleTag warp-domain."
+      "info8": "(WARP must be enabled) Add WARP domain route to ruleTag warp-domain.",
+      "option7": "Manage existing routing rules",
+      "info9": "List, delete, or clear custom block/WARP IP/domain rules."
     },
     "sni_config": {
       "title": "SNI Configuration",
@@ -145,6 +147,18 @@
       "info2": "Add an independent certificate and reverse proxy site",
       "info3": "Modify the domain or upstream target",
       "info4": "Delete site config, certificate, and renew record"
+    },
+    "route_rule_management": {
+      "title": "Existing Routing Rule Management",
+      "option1": "List all custom routing rules",
+      "option2": "Delete one rule entry",
+      "option3": "Clear one rule group",
+      "info1": "Shows only block-ip, block-domain, warp-ip, and warp-domain; system rules are not modified.",
+      "info2": "Select a rule group, then delete one entry by index.",
+      "info3": "Select a rule group and remove all entries in that group."
+    },
+    "route_rule_types": {
+      "title": "Select Rule Group"
     }
   },
   "handler": {
@@ -178,6 +192,15 @@
     },
     "sni": {
       "port_guard_fail": "SNI initialization stopped: required port check failed"
+    },
+    "routing": {
+      "empty": "(empty)",
+      "delete_prompt": "Enter the rule index to delete: ",
+      "invalid_index": "Invalid rule index",
+      "deleted": "Rule deleted and Xray configuration reloaded",
+      "clear_prompt": "Confirm clearing rule group",
+      "cleared": "Rule group cleared and Xray configuration reloaded",
+      "cancelled": "Operation cancelled"
     }
   },
   "read": {
