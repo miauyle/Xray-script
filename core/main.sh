@@ -2,11 +2,11 @@
 # =============================================================================
 # 注释: 通过 Qwen3-Coder 生成。
 # 脚本名称: main.sh
-# 脚本仓库: https://github.com/zxcvos/Xray-script
+# 脚本仓库: https://github.com/miauyle/Xray-script
 # 功能描述: Xray-script 项目的主要管理脚本。
 #           提供交互式菜单和命令行接口，用于安装、配置、管理 Xray-core
 #           和相关服务（如 Nginx, GeoIP, WARP 等），支持多语言。
-# 作者: zxcvos
+# 维护者: miauyle
 # 时间: 2025-07-25
 # 版本: 1.0.0
 # 依赖: bash, jq, cut, sed
