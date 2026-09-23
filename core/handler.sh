@@ -854,12 +854,22 @@ function handler_import_config_bundle() {
         _error "Failed to back up script config before import"
     }
 
+    local script_temp
+    script_temp="$(mktemp "${SCRIPT_CONFIG_PATH}.import.XXXXXX")" || {
+        rm -rf "${workdir}" "${script_backup}"
+        _error "Failed to stage imported script config"
+    }
+    cp -p "${workdir}/script-config.json" "${script_temp}" || {
+        rm -rf "${workdir}" "${script_backup}" "${script_temp}"
+        _error "Failed to stage imported script config"
+    }
+
     XRAY_CONFIG="$(jq '.' "${workdir}/xray-config.json")"
     apply_xray_config "import:$(basename "${archive}")" restart
-    if ! cp -p "${workdir}/script-config.json" "${SCRIPT_CONFIG_PATH}"; then
+    if ! mv -f "${script_temp}" "${SCRIPT_CONFIG_PATH}"; then
         [[ -n "${LAST_XRAY_BACKUP}" ]] && restore_xray_file_without_backup "${LAST_XRAY_BACKUP}" "import-script-rollback" && restart_xray_service_checked || true
         cp -p "${script_backup}" "${SCRIPT_CONFIG_PATH}" >/dev/null 2>&1 || true
-        rm -rf "${workdir}" "${script_backup}"
+        rm -rf "${workdir}" "${script_backup}" "${script_temp}"
         _error "Failed to apply imported script config; Xray rollback was attempted"
     fi
     SCRIPT_CONFIG="$(jq '.' "${SCRIPT_CONFIG_PATH}")"
@@ -916,6 +926,7 @@ function add_rule() {
     local position=$5    # 获取插入位置参数
     local target_tag=$6  # 获取目标规则标签参数
     local restart_after="${7:-no}"
+    local apply_after="${8:-yes}"
     # 如果 XRAY_CONFIG 未初始化，则从文件加载
     XRAY_CONFIG="${XRAY_CONFIG:-$(jq '.' "${XRAY_CONFIG_PATH}")}"
     # 检查是否存在具有相同 ruleTag 的规则
@@ -968,8 +979,10 @@ function add_rule() {
             fi
         fi
     fi
-    # Routing 已迁移到新的统一安全写入入口。
-    apply_xray_config "routing:add:${rule_tag}" "${restart_after}"
+    # 构建完整配置时可只修改内存，交由外层一次性 apply。
+    if [[ "${apply_after}" == 'yes' ]]; then
+        apply_xray_config "routing:add:${rule_tag}" "${restart_after}"
+    fi
 }
 
 # =============================================================================
@@ -1472,9 +1485,9 @@ function handler_xray_config() {
         ;;
     1)
         # 重置并添加默认路由规则
-        [[ "${XRAY_RULES_BT}" -eq 1 ]] && add_rule "bt" "protocol" "bittorrent" "block" 1
-        [[ "${XRAY_RULES_CN}" -eq 1 ]] && add_rule "cn-ip" "ip" "geoip:cn" "block" "after" "private-ip"
-        [[ "${XRAY_RULES_AD}" -eq 1 ]] && add_rule "ad-domain" "domain" "geosite:category-ads-all" "block"
+        [[ "${XRAY_RULES_BT}" -eq 1 ]] && add_rule "bt" "protocol" "bittorrent" "block" 1 '' no no
+        [[ "${XRAY_RULES_CN}" -eq 1 ]] && add_rule "cn-ip" "ip" "geoip:cn" "block" "after" "private-ip" no no
+        [[ "${XRAY_RULES_AD}" -eq 1 ]] && add_rule "ad-domain" "domain" "geosite:category-ads-all" "block" '' '' no no
         ;;
     esac
     # 处理 WARP 状态
@@ -1491,7 +1504,7 @@ function handler_xray_config() {
     # 更新脚本配置中的路由规则
     SCRIPT_CONFIG="$(echo "${SCRIPT_CONFIG}" | jq --argjson rules "${XRAY_RULES}" '.rules = $rules')"
     # 统一执行 Xray 配置校验、自动备份和安全写入；成功后再保存脚本配置。
-    apply_xray_config "xray:regenerate"
+    apply_xray_config "xray:regenerate" restart
     echo "${SCRIPT_CONFIG}" >"${SCRIPT_CONFIG_PATH}" && sleep 2
 }
 
