@@ -638,29 +638,66 @@ function backup_xray_config() {
 }
 
 # =============================================================================
-# 函数名称: persist_xray_config
-# 功能描述: 校验候选 Xray 配置并安全写入正式配置文件。
+# 函数名称: apply_xray_config
+# 功能描述: 统一安全应用候选 Xray 配置。
+#           1. 将 XRAY_CONFIG 写入同目录临时文件。
+#           2. 使用 Xray 自身校验候选配置。
+#           3. 覆盖前自动备份当前正式配置。
+#           4. 使用同文件系统原子 rename 替换正式配置，避免部分写入。
+# 参数:
+#   $1: context - (可选) 调用场景，仅用于错误信息/后续诊断。
 # =============================================================================
-function persist_xray_config() {
+function apply_xray_config() {
+    local context="${1:-unspecified}"
     local temp_config
-    temp_config="$(mktemp "${XRAY_CONFIG_PATH}.tmp.XXXXXX")" || _error "Failed to create temporary Xray config"
-    printf '%s\n' "${XRAY_CONFIG}" >"${temp_config}"
+
+    temp_config="$(mktemp "${XRAY_CONFIG_PATH}.tmp.XXXXXX")" ||
+        _error "Failed to create temporary Xray config [${context}]"
+
+    if ! printf '%s\n' "${XRAY_CONFIG}" >"${temp_config}"; then
+        rm -f "${temp_config}"
+        _error "Failed to stage Xray configuration [${context}]"
+    fi
 
     if ! xray run -test -format=json -c "${temp_config}" >/dev/null 2>&1; then
         rm -f "${temp_config}"
-        XRAY_CONFIG="$(jq '.' "${XRAY_CONFIG_PATH}")"
-        _error "Xray configuration validation failed; original config was kept"
+        if [[ -f "${XRAY_CONFIG_PATH}" ]]; then
+            XRAY_CONFIG="$(jq '.' "${XRAY_CONFIG_PATH}")"
+        else
+            XRAY_CONFIG=''
+        fi
+        _error "Xray configuration validation failed; original config was kept [${context}]"
     fi
 
+    # 保持现有正式配置权限；首次创建时使用 mktemp 的 600 权限。
+    if [[ -f "${XRAY_CONFIG_PATH}" ]]; then
+        if ! chmod --reference="${XRAY_CONFIG_PATH}" "${temp_config}"; then
+            rm -f "${temp_config}"
+            _error "Failed to preserve Xray config permissions [${context}]"
+        fi
+    fi
+
+    # backup_xray_config 内部保证：备份失败时不会继续覆盖正式配置。
     backup_xray_config
 
-    if ! cat "${temp_config}" >"${XRAY_CONFIG_PATH}"; then
+    # temp_config 与正式配置位于同一目录，mv 在同一文件系统内完成原子替换。
+    if ! mv -f "${temp_config}" "${XRAY_CONFIG_PATH}"; then
         rm -f "${temp_config}"
-        _error "Failed to write Xray configuration"
+        _error "Failed to atomically replace Xray configuration [${context}]"
     fi
 
-    rm -f "${temp_config}"
+    XRAY_CONFIG="$(jq '.' "${XRAY_CONFIG_PATH}")" ||
+        _error "Failed to reload applied Xray configuration [${context}]"
     sleep 2
+}
+
+# =============================================================================
+# 函数名称: persist_xray_config
+# 功能描述: 兼容旧调用点的过渡包装器。
+#           新代码应直接调用 apply_xray_config；其余调用点后续逐步迁移。
+# =============================================================================
+function persist_xray_config() {
+    apply_xray_config "legacy:persist"
 }
 
 # =============================================================================
@@ -753,8 +790,8 @@ function add_rule() {
             fi
         fi
     fi
-    # 使用统一的校验与安全写入流程保存配置。
-    persist_xray_config
+    # Routing 已迁移到新的统一安全写入入口。
+    apply_xray_config "routing:add:${rule_tag}"
 }
 
 # =============================================================================
@@ -876,7 +913,7 @@ function handler_routing_rule_delete() {
         )
     ')"
 
-    persist_xray_config
+    apply_xray_config "routing:delete:${rule_tag}"
     handler_restart
     echo -e "${GREEN}[$(echo "$I18N_DATA" | jq -r '.title.info')]${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.routing.deleted")"
 }
@@ -908,7 +945,7 @@ function handler_routing_rule_clear() {
         XRAY_CONFIG="$(echo "${XRAY_CONFIG}" | jq --arg ruleTag "${rule_tag}" '
             .routing.rules |= map(select(.ruleTag != $ruleTag))
         ')"
-        persist_xray_config
+        apply_xray_config "routing:clear:${rule_tag}"
         handler_restart
         echo -e "${GREEN}[$(echo "$I18N_DATA" | jq -r '.title.info')]${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.routing.cleared")"
         ;;
