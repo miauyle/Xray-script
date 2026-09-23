@@ -525,9 +525,10 @@ PY
 
 function publish_http_subscription() {
     local token="$1"
-    local old_token='' had_token=0
+    local old_token='' had_token=0 was_active=0
 
     command -v python3 >/dev/null 2>&1 || return 1
+    http_service_active && was_active=1
     http_port_available || return 2
     [[ -s "${CLASH_TOKEN_PATH}" ]] && {
         old_token="$(current_token)"
@@ -547,10 +548,18 @@ function publish_http_subscription() {
     systemctl enable xray-clash-subscription >/dev/null 2>&1 || true
     if ! systemctl restart xray-clash-subscription; then
         if [[ "${had_token}" -eq 1 ]]; then save_token "${old_token}"; else rm -f "${CLASH_TOKEN_PATH}"; fi
-        systemctl disable --now xray-clash-subscription >/dev/null 2>&1 || true
+        [[ "${was_active}" -eq 0 ]] && systemctl disable --now xray-clash-subscription >/dev/null 2>&1 || true
         return 3
     fi
-    systemctl -q is-active xray-clash-subscription || return 3
+    if ! systemctl -q is-active xray-clash-subscription; then
+        if [[ "${had_token}" -eq 1 ]]; then save_token "${old_token}"; else rm -f "${CLASH_TOKEN_PATH}"; fi
+        return 3
+    fi
+    if ! curl -fsS --max-time 5 "http://127.0.0.1:${CLASH_HTTP_PORT}/sub/${token}/clash.yaml" >/dev/null 2>&1; then
+        if [[ "${had_token}" -eq 1 ]]; then save_token "${old_token}"; else rm -f "${CLASH_TOKEN_PATH}"; fi
+        [[ "${was_active}" -eq 0 ]] && systemctl disable --now xray-clash-subscription >/dev/null 2>&1 || systemctl restart xray-clash-subscription >/dev/null 2>&1 || true
+        return 3
+    fi
     return 0
 }
 
@@ -604,10 +613,11 @@ function confirm_http_fallback() {
 }
 
 function enable_remote() {
-    local token rc host
+    local token rc host previous_backend
     generate_yaml
     token="$(current_token)"
     [[ -n "${token}" ]] || token="$(generate_token_value)"
+    previous_backend="$(state_value backend 2>/dev/null || true)"
 
     if nginx_subscription_available; then
         publish_nginx_subscription "${token}"
@@ -617,6 +627,7 @@ function enable_remote() {
             save_token "${token}"
             host="$(subscription_domain)"
             save_state 'nginx' "${host}" 443
+            [[ "${previous_backend}" == 'http' ]] && disable_http_subscription
             ;;
         2) fail "$(msg nginx_validation_failed)" ;;
         *) fail "$(msg nginx_update_failed)" ;;
@@ -630,6 +641,9 @@ function enable_remote() {
         0)
             host="$(get_public_ip)"
             save_state 'http' "${host}" "${CLASH_HTTP_PORT}"
+            if [[ "${previous_backend}" == 'nginx' ]]; then
+                disable_nginx_subscription || warn "$(msg old_backend_cleanup_failed)"
+            fi
             ;;
         2) fail "$(msg http_port_busy): ${CLASH_HTTP_PORT}" ;;
         *) fail "$(msg http_service_failed)" ;;
