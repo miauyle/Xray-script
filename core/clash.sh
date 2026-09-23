@@ -301,12 +301,16 @@ function current_token() {
     [[ -s "${CLASH_TOKEN_PATH}" ]] && tr -d '[:space:]' <"${CLASH_TOKEN_PATH}"
 }
 
-function generate_token() {
+function generate_token_value() {
+    openssl rand -hex 24 || fail "$(msg token_failed)"
+}
+
+function save_token() {
+    local token="$1"
     mkdir -p "${CLASH_DIR}"
     chmod 700 "${CLASH_DIR}"
-    openssl rand -hex 24 >"${CLASH_TOKEN_PATH}" || fail "$(msg token_failed)"
+    printf '%s\n' "${token}" >"${CLASH_TOKEN_PATH}" || fail "$(msg token_failed)"
     chmod 600 "${CLASH_TOKEN_PATH}"
-    current_token
 }
 
 function subscription_domain() {
@@ -326,9 +330,10 @@ function subscription_url() {
 
 function ensure_site_include() {
     local site_file="$1"
-    [[ -f "${site_file}" ]] || return 0
+    [[ -f "${site_file}" ]] || return 1
     if ! grep -Fq 'include nginxconfig.io/clash-subscription.conf;' "${site_file}"; then
         sed -i '/# additional config/i\    include nginxconfig.io/clash-subscription.conf;' "${site_file}" || return 1
+        grep -Fq 'include nginxconfig.io/clash-subscription.conf;' "${site_file}" || return 1
     fi
 }
 
@@ -348,55 +353,144 @@ location = /sub/${token}/clash.yaml {
 EOF_NGINX
 }
 
-function nginx_validate_reload() {
-    nginx -t >/dev/null 2>&1 || fail "$(msg nginx_validation_failed)"
-    systemctl -q is-active nginx && systemctl reload nginx || systemctl start nginx
+function restore_nginx_file() {
+    local original="$1"
+    local backup="$2"
+    local existed="$3"
+    if [[ "${existed}" -eq 1 ]]; then
+        cp -af "${backup}" "${original}"
+    else
+        rm -f "${original}"
+    fi
+}
+
+function publish_nginx_subscription() {
+    local token="$1"
+    local domain cdn domain_file cdn_file backup_dir
+    local sub_existed=0 domain_existed=0 cdn_existed=0
+
+    domain="$(echo "${SCRIPT_CONFIG}" | jq -r '.nginx.domain // empty')"
+    cdn="$(echo "${SCRIPT_CONFIG}" | jq -r '.nginx.cdn // empty')"
+    [[ -n "${domain}" ]] || return 1
+    domain_file="${NGINX_CONFIG_DIR}/sites-available/${domain}.conf"
+    cdn_file="${NGINX_CONFIG_DIR}/sites-available/${cdn}.conf"
+    [[ -f "${domain_file}" ]] || return 1
+
+    backup_dir="$(mktemp -d "${CLASH_DIR}/nginx-backup.XXXXXX")" || return 1
+    if [[ -f "${NGINX_SUB_CONFIG}" ]]; then
+        cp -af "${NGINX_SUB_CONFIG}" "${backup_dir}/subscription.conf"
+        sub_existed=1
+    fi
+    cp -af "${domain_file}" "${backup_dir}/domain.conf"
+    domain_existed=1
+    if [[ -n "${cdn}" && -f "${cdn_file}" ]]; then
+        cp -af "${cdn_file}" "${backup_dir}/cdn.conf"
+        cdn_existed=1
+    fi
+
+    if ! write_nginx_subscription_config "${token}" || ! ensure_site_include "${domain_file}"; then
+        restore_nginx_file "${NGINX_SUB_CONFIG}" "${backup_dir}/subscription.conf" "${sub_existed}"
+        restore_nginx_file "${domain_file}" "${backup_dir}/domain.conf" "${domain_existed}"
+        [[ "${cdn_existed}" -eq 1 ]] && restore_nginx_file "${cdn_file}" "${backup_dir}/cdn.conf" 1
+        rm -rf "${backup_dir}"
+        return 1
+    fi
+    if [[ "${cdn_existed}" -eq 1 ]]; then
+        ensure_site_include "${cdn_file}" || {
+            restore_nginx_file "${NGINX_SUB_CONFIG}" "${backup_dir}/subscription.conf" "${sub_existed}"
+            restore_nginx_file "${domain_file}" "${backup_dir}/domain.conf" "${domain_existed}"
+            restore_nginx_file "${cdn_file}" "${backup_dir}/cdn.conf" 1
+            rm -rf "${backup_dir}"
+            return 1
+        }
+    fi
+
+    if ! nginx -t >/dev/null 2>&1; then
+        restore_nginx_file "${NGINX_SUB_CONFIG}" "${backup_dir}/subscription.conf" "${sub_existed}"
+        restore_nginx_file "${domain_file}" "${backup_dir}/domain.conf" "${domain_existed}"
+        [[ "${cdn_existed}" -eq 1 ]] && restore_nginx_file "${cdn_file}" "${backup_dir}/cdn.conf" 1
+        rm -rf "${backup_dir}"
+        return 2
+    fi
+
+    if systemctl -q is-active nginx; then
+        if ! systemctl reload nginx; then
+            restore_nginx_file "${NGINX_SUB_CONFIG}" "${backup_dir}/subscription.conf" "${sub_existed}"
+            restore_nginx_file "${domain_file}" "${backup_dir}/domain.conf" "${domain_existed}"
+            [[ "${cdn_existed}" -eq 1 ]] && restore_nginx_file "${cdn_file}" "${backup_dir}/cdn.conf" 1
+            nginx -t >/dev/null 2>&1 && systemctl reload nginx >/dev/null 2>&1 || true
+            rm -rf "${backup_dir}"
+            return 3
+        fi
+    else
+        if ! systemctl start nginx; then
+            restore_nginx_file "${NGINX_SUB_CONFIG}" "${backup_dir}/subscription.conf" "${sub_existed}"
+            restore_nginx_file "${domain_file}" "${backup_dir}/domain.conf" "${domain_existed}"
+            [[ "${cdn_existed}" -eq 1 ]] && restore_nginx_file "${cdn_file}" "${backup_dir}/cdn.conf" 1
+            rm -rf "${backup_dir}"
+            return 3
+        fi
+    fi
+
+    rm -rf "${backup_dir}"
+    return 0
 }
 
 function enable_remote() {
-    local tag domain cdn token
+    local tag token rc
     tag="$(echo "${SCRIPT_CONFIG}" | jq -r '.xray.tag // empty | ascii_downcase')"
     [[ "${tag}" == 'sni' ]] || fail "$(msg remote_requires_sni)"
     command -v nginx >/dev/null 2>&1 || fail "$(msg nginx_missing)"
 
     generate_yaml
     token="$(current_token)"
-    [[ -n "${token}" ]] || token="$(generate_token)"
-    domain="$(echo "${SCRIPT_CONFIG}" | jq -r '.nginx.domain // empty')"
-    cdn="$(echo "${SCRIPT_CONFIG}" | jq -r '.nginx.cdn // empty')"
-    [[ -n "${domain}" ]] || fail "$(msg domain_missing)"
-
-    write_nginx_subscription_config "${token}"
-    ensure_site_include "${NGINX_CONFIG_DIR}/sites-available/${domain}.conf" || fail "$(msg nginx_update_failed)"
-    [[ -n "${cdn}" ]] && ensure_site_include "${NGINX_CONFIG_DIR}/sites-available/${cdn}.conf" || true
-    nginx_validate_reload
+    [[ -n "${token}" ]] || token="$(generate_token_value)"
+    publish_nginx_subscription "${token}"
+    rc=$?
+    case "${rc}" in
+    0) save_token "${token}" ;;
+    2) fail "$(msg nginx_validation_failed)" ;;
+    *) fail "$(msg nginx_update_failed)" ;;
+    esac
     show_info
 }
 
 function rotate_remote() {
-    local tag domain cdn token
+    local tag token rc
     tag="$(echo "${SCRIPT_CONFIG}" | jq -r '.xray.tag // empty | ascii_downcase')"
     [[ "${tag}" == 'sni' ]] || fail "$(msg remote_requires_sni)"
+    command -v nginx >/dev/null 2>&1 || fail "$(msg nginx_missing)"
     [[ -f "${CLASH_CONFIG_PATH}" ]] || generate_yaml
-    rm -f "${CLASH_TOKEN_PATH}"
-    token="$(generate_token)"
-    domain="$(echo "${SCRIPT_CONFIG}" | jq -r '.nginx.domain // empty')"
-    cdn="$(echo "${SCRIPT_CONFIG}" | jq -r '.nginx.cdn // empty')"
-    write_nginx_subscription_config "${token}"
-    ensure_site_include "${NGINX_CONFIG_DIR}/sites-available/${domain}.conf" || fail "$(msg nginx_update_failed)"
-    [[ -n "${cdn}" ]] && ensure_site_include "${NGINX_CONFIG_DIR}/sites-available/${cdn}.conf" || true
-    nginx_validate_reload
+    token="$(generate_token_value)"
+    publish_nginx_subscription "${token}"
+    rc=$?
+    case "${rc}" in
+    0) save_token "${token}" ;;
+    2) fail "$(msg nginx_validation_failed)" ;;
+    *) fail "$(msg nginx_update_failed)" ;;
+    esac
     show_info
 }
 
 function disable_remote() {
-    if [[ -d "$(dirname "${NGINX_SUB_CONFIG}")" ]]; then
-        printf '%s\n' '# Clash/Mihomo remote subscription is disabled.' >"${NGINX_SUB_CONFIG}"
+    local backup=''
+    if [[ -f "${NGINX_SUB_CONFIG}" ]]; then
+        backup="$(mktemp "${CLASH_DIR}/subscription.conf.bak.XXXXXX")" || fail "$(msg temp_failed)"
+        cp -af "${NGINX_SUB_CONFIG}" "${backup}"
     fi
-    rm -f "${CLASH_TOKEN_PATH}"
+    mkdir -p "$(dirname "${NGINX_SUB_CONFIG}")"
+    printf '%s\n' '# Clash/Mihomo remote subscription is disabled.' >"${NGINX_SUB_CONFIG}"
     if command -v nginx >/dev/null 2>&1; then
-        nginx_validate_reload
+        if ! nginx -t >/dev/null 2>&1; then
+            [[ -n "${backup}" ]] && cp -af "${backup}" "${NGINX_SUB_CONFIG}"
+            rm -f "${backup}"
+            fail "$(msg nginx_validation_failed)"
+        fi
+        if systemctl -q is-active nginx; then
+            systemctl reload nginx || fail "$(msg nginx_update_failed)"
+        fi
     fi
+    rm -f "${backup}" "${CLASH_TOKEN_PATH}"
     info "$(msg remote_disabled)"
 }
 
