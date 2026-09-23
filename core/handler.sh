@@ -669,11 +669,16 @@ function apply_xray_config() {
         _error "Xray configuration validation failed; original config was kept [${context}]"
     fi
 
-    # 保持现有正式配置权限；首次创建时使用 mktemp 的 600 权限。
+    # 原子替换会换 inode；保留现有正式配置的权限和 owner/group。
+    # 首次创建时沿用 mktemp 的 root:root / 600。
     if [[ -f "${XRAY_CONFIG_PATH}" ]]; then
         if ! chmod --reference="${XRAY_CONFIG_PATH}" "${temp_config}"; then
             rm -f "${temp_config}"
             _error "Failed to preserve Xray config permissions [${context}]"
+        fi
+        if ! chown --reference="${XRAY_CONFIG_PATH}" "${temp_config}"; then
+            rm -f "${temp_config}"
+            _error "Failed to preserve Xray config ownership [${context}]"
         fi
     fi
 
@@ -707,7 +712,7 @@ function persist_xray_config() {
 #           2. 如果存在且是 domain 或 ip 规则，则追加新值。
 #           3. 如果不存在，则创建新规则。
 #           4. 新规则可以插入到指定位置或相对于其他规则的位置。
-#           5. 更新后的配置写入 XRAY_CONFIG_PATH 文件。
+#           5. 更新后的候选配置通过 apply_xray_config 统一校验、备份并应用。
 # 参数:
 #   $1: rule_tag - 规则标签 (ruleTag)，用于唯一标识规则
 #   $2: domain_or_ip - 规则类型 ("domain" 或 "ip")
@@ -715,7 +720,7 @@ function persist_xray_config() {
 #   $4: outboundTag - 出站标签 (例如 "block", "warp")
 #   $5: position - (可选) 插入位置或相对于 target_tag 的位置 ("before", "after", 数字索引)
 #   $6: target_tag - (可选) 用于定位插入位置的参考规则标签
-# 返回值: 无 (直接修改 XRAY_CONFIG_PATH 文件)
+# 返回值: 无 (通过 apply_xray_config 安全应用配置)
 # =============================================================================
 function add_rule() {
     local rule_tag=$1     # 获取规则标签
