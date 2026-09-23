@@ -1350,12 +1350,50 @@ function handler_xray_config() {
     esac
     # 处理 WARP 状态
     if [[ ${WARP_STATUS} -eq 1 ]]; then
-        # 获取 WARP 容器 IP
         local container_ip="$(exec_docker '--obtain-container-ip')"
-        # 构造 WARP Socks 出站配置 JSON
-        local socks_config='[{"tag":"warp","protocol":"socks","settings":{"servers":[{"address":"'"${container_ip}"'","port":40001}]}}]'
-        # 将 WARP 出站配置添加到 Xray 配置中
+        local socks_config='[{"tag":"warp","protocol":"socks","settings":{"servers":[{"address":"'${container_ip}'","port":40001}]}}]'
         XRAY_CONFIG=$(echo "${XRAY_CONFIG}" | jq --argjson socks_config "${socks_config}" '.outbounds += $socks_config')
+    fi
+
+    # 恢复 Direct 出口 IP family 偏好。
+    local direct_family="$(echo "${SCRIPT_CONFIG}" | jq -r '.xray.direct_family // "auto"')"
+    case "${direct_family}" in
+    ipv4 | ipv6)
+        local direct_strategy='UseIPv4'
+        [[ "${direct_family}" == 'ipv6' ]] && direct_strategy='UseIPv6'
+        XRAY_CONFIG="$(echo "${XRAY_CONFIG}" | jq --arg strategy "${direct_strategy}" '
+            .outbounds |= map(
+                if .tag == "direct" and .protocol == "freedom" then
+                    .streamSettings = (.streamSettings // {})
+                    | .streamSettings.sockopt = (.streamSettings.sockopt // {})
+                    | .streamSettings.sockopt.domainStrategy = $strategy
+                else . end
+            )
+        ')"
+        ;;
+    esac
+
+    # 完整重生成时恢复 WARP direct fallback。
+    if [[ ${WARP_STATUS} -eq 1 && "$(echo "${SCRIPT_CONFIG}" | jq -r '.xray.warp_fallback // 0')" -eq 1 ]]; then
+        XRAY_CONFIG="$(echo "${XRAY_CONFIG}" | jq '
+            .routing.balancers = [{
+                "tag": "warp-fallback",
+                "selector": ["warp"],
+                "fallbackTag": "direct",
+                "strategy": {"type": "random"}
+            }]
+            | .observatory = {
+                "subjectSelector": ["warp"],
+                "probeUrl": "https://www.gstatic.com/generate_204",
+                "probeInterval": "30s",
+                "enableConcurrency": false
+            }
+            | .routing.rules |= map(
+                if .outboundTag == "warp" then
+                    del(.outboundTag) | .balancerTag = "warp-fallback"
+                else . end
+            )
+        ')"
     fi
     # 获取更新后的路由规则
     XRAY_RULES="$(echo "${XRAY_CONFIG}" | jq '.routing.rules')"
@@ -1951,36 +1989,37 @@ function handler_docker() {
 # 返回值: 无 (通过调用其他函数和脚本执行操作，修改配置文件)
 # =============================================================================
 function handler_warp() {
-    # 确保 Docker 已安装
     handler_docker
-    # 从脚本配置中读取当前 WARP 状态
-    local WARP_STATUS="$(echo "${SCRIPT_CONFIG}" | jq -r '.xray.warp')"
-    # 从 Xray 配置文件加载配置
-    XRAY_CONFIG="$(jq '.' "${XRAY_CONFIG_PATH}")"
-    # 如果 WARP 已启用 (状态为 1)
-    if [[ ${WARP_STATUS} -eq 1 ]]; then
-        WARP_STATUS=0 # 设置状态为禁用
-        # 调用 docker.sh 禁用 WARP 容器
-        exec_docker '--disable-warp'
-        # 从 Xray 配置中删除 WARP 出站和相关路由规则
-        XRAY_CONFIG=$(echo "${XRAY_CONFIG}" | jq 'del(.outbounds[] | select(.tag == "warp")) | del(.routing.rules[] | select(.outboundTag == "warp"))')
-    else
-        WARP_STATUS=1 # 设置状态为启用
-        # 调用 docker.sh 构建并启用 WARP 容器
-        exec_docker '--build-warp'
-        local container_ip="$(exec_docker '--enable-warp')" # 获取 WARP 容器 IP
-        # 构造 WARP Socks 出站配置 JSON
-        local socks_config='[{"tag":"warp","protocol":"socks","settings":{"servers":[{"address":"'"${container_ip}"'","port":40001}]}}]'
-        # 将 WARP 出站配置添加到 Xray 配置中
-        XRAY_CONFIG=$(echo "${XRAY_CONFIG}" | jq --argjson socks_config "${socks_config}" '.outbounds += $socks_config')
-    fi
-    # 更新脚本配置中的 WARP 状态
-    SCRIPT_CONFIG=$(echo "${SCRIPT_CONFIG}" | jq --arg warp "${WARP_STATUS}" '.xray.warp = $warp')
-    # 统一执行 Xray 配置校验、自动备份和安全写入；成功后再保存脚本配置。
-    apply_xray_config "warp:toggle" "restart"
-    echo "${SCRIPT_CONFIG}" >"${SCRIPT_CONFIG_PATH}" && sleep 2
-}
+    local WARP_STATUS="$(echo "${SCRIPT_CONFIG}" | jq -r '.xray.warp // 0')"
+    XRAY_CONFIG="$(jq '.' "${XRAY_CONFIG_PATH}")" || _error "Failed to read Xray configuration"
 
+    if [[ ${WARP_STATUS} -eq 1 ]]; then
+        exec_docker '--disable-warp'
+        XRAY_CONFIG="$(echo "${XRAY_CONFIG}" | jq '
+            .outbounds |= map(select(.tag != "warp"))
+            | .routing.rules |= map(select(.outboundTag != "warp" and .balancerTag != "warp-fallback"))
+            | .routing.balancers = ((.routing.balancers // []) | map(select(.tag != "warp-fallback")))
+            | if ((.routing.balancers // []) | length) == 0 then del(.routing.balancers) else . end
+            | if .observatory then
+                .observatory.subjectSelector = ((.observatory.subjectSelector // []) | map(select(. != "warp")))
+                | if (.observatory.subjectSelector | length) == 0 then del(.observatory) else . end
+              else . end
+        ')"
+        SCRIPT_CONFIG="$(echo "${SCRIPT_CONFIG}" | jq '.xray.warp = 0 | .xray.warp_fallback = 0')"
+    else
+        exec_docker '--build-warp'
+        local container_ip="$(exec_docker '--enable-warp')"
+        [[ -n "${container_ip}" ]] || _error "Failed to obtain WARP container IP"
+        local socks_config='[{"tag":"warp","protocol":"socks","settings":{"servers":[{"address":"'${container_ip}'","port":40001}]}}]'
+        XRAY_CONFIG="$(echo "${XRAY_CONFIG}" | jq --argjson socks_config "${socks_config}" '
+            .outbounds = ((.outbounds // []) | map(select(.tag != "warp"))) + $socks_config
+        ')"
+        SCRIPT_CONFIG="$(echo "${SCRIPT_CONFIG}" | jq '.xray.warp = 1 | .xray.warp_fallback = (.xray.warp_fallback // 0)')"
+    fi
+
+    apply_xray_config "warp:toggle" "restart"
+    persist_script_config
+}
 # =============================================================================
 # 函数名称: handler_reset_warp
 # 功能描述: 重新构建并启动 WARP 容器。
@@ -1992,24 +2031,26 @@ function handler_warp() {
 # 返回值: 无 (通过调用其他函数和脚本执行操作)
 # =============================================================================
 function handler_reset_warp() {
-    # 确保 Docker 已安装
     handler_docker
-    # 从脚本配置中读取当前 WARP 状态
-    local WARP_STATUS="$(echo "${SCRIPT_CONFIG}" | jq -r '.xray.warp')"
-    # 从 Xray 配置文件加载配置
-    XRAY_CONFIG="$(jq '.' "${XRAY_CONFIG_PATH}")"
-    # 如果 WARP 已启用 (状态为 1)
-    if [[ ${WARP_STATUS} -eq 1 ]]; then
-        # 清空 WARP 容器日志数据
-        exec_docker '--clean-container-logs'
-        # 调用 docker.sh 禁用 WARP 容器
-        exec_docker '--disable-warp'
-        # 调用 docker.sh 构建并启用 WARP 容器
-        exec_docker '--build-warp'
-        exec_docker '--enable-warp'
-    fi
-}
+    local WARP_STATUS="$(echo "${SCRIPT_CONFIG}" | jq -r '.xray.warp // 0')"
+    [[ ${WARP_STATUS} -eq 1 ]] || return 0
 
+    exec_docker '--clean-container-logs'
+    exec_docker '--disable-warp'
+    exec_docker '--build-warp'
+    local container_ip="$(exec_docker '--enable-warp')"
+    [[ -n "${container_ip}" ]] || _error "Failed to obtain WARP container IP after reset"
+
+    XRAY_CONFIG="$(jq '.' "${XRAY_CONFIG_PATH}")" || _error "Failed to read Xray configuration"
+    XRAY_CONFIG="$(echo "${XRAY_CONFIG}" | jq --arg ip "${container_ip}" '
+        .outbounds |= map(
+            if .tag == "warp" then
+                .settings.servers[0].address = $ip
+            else . end
+        )
+    ')"
+    apply_xray_config "warp:reset" "restart"
+}
 # =============================================================================
 # 函数名称: handler_nginx_install
 # 功能描述: 安装 Nginx。
