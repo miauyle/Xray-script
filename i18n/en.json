@@ -583,6 +583,7 @@
     "old_backend_cleanup_failed": "The new subscription backend is active, but cleanup of the old backend failed; please inspect it manually",
     "http_firewall_hint": "If the subscription is unreachable externally, make sure this TCP port is allowed by the VPS/cloud firewall",
     "http_port_prompt": "Enter the HTTP subscription port; press Enter to use the default",
-    "http_port_invalid": "Invalid HTTP subscription port; enter a value from 1 to 65535"
+    "http_port_invalid": "Invalid HTTP subscription port; enter a value from 1 to 65535",
+    "http_self_test_failed": "The lightweight HTTP subscription service started, but the local subscription self-test failed; systemd/journal diagnostics were printed above"
   }
 }
