@@ -293,6 +293,7 @@ function menu_config() {
     echo -e "${GREEN}5.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.config_management.option5")"
     # 打印选项 6
     echo -e "${GREEN}6.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.config_management.option6")"
+    echo -e "${GREEN}7.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.config_management.option7")"
 
     # 打印分隔线
     echo -e "------------------------------------------------------"
@@ -306,7 +307,22 @@ function menu_config() {
     echo -e "4. $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.config_management.info4")"
     # 打印选项 5 的说明信息
     echo -e "5. $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.config_management.info5")"
+    echo -e "7. $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.config_management.info7")"
     # 打印分隔线
+    echo -e "------------------------------------------------------"
+}
+
+function menu_recovery() {
+    echo -e "------------------ $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.recovery.title") ------------------"
+    echo -e "${GREEN}1.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.recovery.option1")"
+    echo -e "${GREEN}2.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.recovery.option2")"
+    echo -e "${GREEN}3.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.recovery.option3")"
+    echo -e "${GREEN}4.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.recovery.option4")"
+    echo -e "------------------------------------------------------"
+    echo -e "1. $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.recovery.info1")"
+    echo -e "2. $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.recovery.info2")"
+    echo -e "3. $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.recovery.info3")"
+    echo -e "4. $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.recovery.info4")"
     echo -e "------------------------------------------------------"
 }
 
@@ -565,6 +581,7 @@ function main() {
     --web) menu_web_config >&2 ;;         # 显示 Web 配置菜单
     --ca) menu_ca_vendor >&2 ;;
     --management) menu_config >&2 ;;      # 显示配置管理菜单
+    --recovery) menu_recovery >&2 ;;       # 配置备份恢复/导入导出
     --route) menu_route >&2 ;;            # 显示路由管理菜单
     --route-rules) menu_route_rules >&2 ;;
     --route-rule-types) menu_route_rule_types >&2 ;;
