@@ -54,6 +54,12 @@
 
 ## 更新日志
 
+11. v2026.09.23.7 新增 Xray 配置自动备份，并缩短 Clash/Mihomo 订阅 Token。
+   1. 覆盖 `/usr/local/etc/xray/config.json` 前自动备份当前配置到 `~/.xray-script/backups/xray/`。
+   2. 备份使用时间戳 + 随机后缀命名，权限为 `600`，备份目录权限为 `700`。
+   3. 默认仅保留最近 10 份备份；清理更旧备份失败只警告，不阻止当前配置更新。
+   4. 备份创建或权限设置失败时立即终止本次修改，避免在没有备份的情况下覆盖正式配置。
+   5. Clash/Mihomo 新订阅 Token 改为 128-bit URL-safe Base64，长度约 22 字符；已有旧 Token 不会被静默替换，可通过“更换订阅 URL Token”生成短 Token。
 10. v2026.09.23.6 升级 Clash Verge Rev / Mihomo 配置生成器到 v2。
    1. 默认开启 Sniffer，覆盖 HTTP、TLS 与 QUIC，并保留常见跳过域名。
    2. 新增 `Proxy` 手动策略组与 `Auto` 延迟测试组；Auto 每 300 秒测试节点，支持 lazy、50ms tolerance 与 HTTP 204 校验。
@@ -135,6 +141,18 @@ SNI 配置中，CDN 的分享链接 Alpn 默认为 H2，如有 H3 需求，请�
 远程订阅与 Xray 的 Vision/Reality/XHTTP 数据链路完全独立。已有 Nginx HTTPS 时 URL 形如 `https://domain/sub/<random-token>/clash.yaml`；没有可复用 HTTPS 站点时，可选择轻量 HTTP 后端。端口直接回车默认使用 `80`，也可手动输入 `1-65535` 的其他端口。80 端口时 URL 形如 `http://server-ip/sub/<random-token>/clash.yaml`；自定义端口时形如 `http://server-ip:<port>/sub/<random-token>/clash.yaml`。脚本不会自动替用户切换端口；所选端口被占用时会直接报错。HTTP 不加密，订阅内容又包含节点凭据，因此只应在你接受这一风险时使用；如果怀疑 URL 泄露，请立即旋转 Token。
 
 当前生成器支持 Vision+Reality、VLESS+XHTTP+Reality、Fallback 与 SNI 中的兼容 VLESS 节点。Mihomo 当前不支持 VLESS+mKCP 和 Trojan+XHTTP，脚本不会为这两类组合生成伪兼容配置。
+
+## Xray 配置自动备份
+
+脚本在覆盖正式 Xray 配置前会自动保存当前版本：
+
+- 正式配置：`/usr/local/etc/xray/config.json`
+- 备份目录：`~/.xray-script/backups/xray/`
+- 默认保留：最近 10 份
+- 首次安装时如果正式配置尚不存在，则不会创建空备份
+- 当前版本只提供自动备份机制，暂不提供恢复菜单
+
+备份失败会直接终止本次配置修改；旧备份清理失败只会输出警告，不影响已经创建的新备份。
 
 ## 如何使用
 
