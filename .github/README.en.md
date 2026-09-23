@@ -55,6 +55,12 @@
 
 ## Changelog
 
+7. v2026.09.23.3 adds Clash Verge Rev / Mihomo config and subscription support.
+   1. Generates an importable Mihomo YAML from the current Xray config.
+   2. Supports Vision+Reality, VLESS+XHTTP+Reality, Fallback, and compatible Reality/XHTTP/TLS-CDN nodes in SNI mode.
+   3. SNI + Nginx can publish a random-token HTTPS subscription without adding a resident service.
+   4. Supports viewing, refreshing, rotating the subscription token, and disabling remote delivery; Nginx changes are backed up and rolled back when validation fails.
+   5. Mihomo currently does not support VLESS+mKCP or Trojan+XHTTP, so the script explicitly refuses to generate invalid configs for those combinations.
 6. v2026.09.23.2 aligns the fork's maintainer and repository branding.
    1. README and terminal banners now display `miauyle/Xray-script`.
    2. Script repository/maintainer metadata now points to the current fork.
@@ -89,6 +95,20 @@
 Implemented based on [VMessAEAD / VLESS share link proposal](https://github.com/XTLS/Xray-core/discussions/716) and [v2rayN](https://github.com/2dust/v2rayN). If other clients do not work, adjust based on the generated share link manually.
 
 In SNI configuration, CDN share links use H2 as default ALPN. If you need H3, modify it in your client.
+
+### Clash Verge Rev / Mihomo
+
+The main menu now includes `Clash/Mihomo Config & Subscription`:
+
+- `Generate/refresh local YAML`: writes `~/.xray-script/clash/clash.yaml`.
+- `Enable/refresh HTTPS subscription`: SNI + Nginx only; serves a static subscription through the existing Nginx process.
+- `Show subscription info`: prints the local YAML path and current remote URL.
+- `Rotate subscription URL token`: invalidates the old URL immediately.
+- `Disable HTTPS subscription`: removes the remote endpoint while keeping the local YAML.
+
+Remote URLs look like `https://domain/sub/<random-token>/clash.yaml`. The subscription contains proxy credentials, so treat the URL like a secret and rotate the token if it may have leaked.
+
+The generator currently supports Vision+Reality, VLESS+XHTTP+Reality, Fallback, and compatible VLESS nodes in SNI mode. Mihomo does not currently support VLESS+mKCP or Trojan+XHTTP, so those combinations are rejected instead of generating misleading configs.
 
 ## How to Use
 
