@@ -566,7 +566,7 @@
     "domain_missing": "SNI 域名为空，无法生成 HTTPS 订阅 URL",
     "nginx_update_failed": "更新 Nginx 站点配置失败",
     "nginx_validation_failed": "Nginx 配置校验失败，未加载订阅配置",
-    "remote_disabled": "Clash/Mihomo HTTPS 远程订阅已关闭",
+    "remote_disabled": "Clash/Mihomo 远程订阅已关闭",
     "local_file": "本地 YAML",
     "remote_url": "远程订阅 URL",
     "disabled": "未启用",
