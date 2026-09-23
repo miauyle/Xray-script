@@ -54,6 +54,12 @@
 
 ## 更新日志
 
+7. v2026.09.23.3 新增 Clash Verge Rev / Mihomo 配置与订阅功能。
+   1. 支持从当前 Xray 配置生成可直接导入的 Mihomo YAML。
+   2. 支持 Vision+Reality、VLESS+XHTTP+Reality、Fallback，以及 SNI 下的 Reality/XHTTP/TLS-CDN 节点。
+   3. SNI + Nginx 模式可发布带随机 Token 的 HTTPS 远程订阅，不新增常驻服务。
+   4. 支持查看、刷新、旋转订阅 Token 和关闭远程订阅；Nginx 修改前备份并在校验失败时回滚。
+   5. Mihomo 当前不支持 VLESS+mKCP 与 Trojan+XHTTP，脚本会明确拒绝生成无效配置。
 6. v2026.09.23.2 统一 fork 的维护者与仓库展示信息。
    1. README 与终端 Banner 改为显示 `miauyle/Xray-script`。
    2. 脚本头部的仓库/维护者元数据改为当前 fork。
@@ -88,6 +94,20 @@
 基于[VMessAEAD / VLESS 分享链接标准提案](https://github.com/XTLS/Xray-core/discussions/716)与[v2rayN](https://github.com/2dust/v2rayN)实现，如果其他客户端无法正常使用，请自行根据分享链接进行修改。
 
 SNI 配置中，CDN 的分享链接 Alpn 默认为 H2，如有 H3 需求，请自行在客户端修改。
+
+### Clash Verge Rev / Mihomo
+
+主菜单新增 `Clash/Mihomo 配置与订阅`：
+
+- `生成/刷新本地 YAML`：输出到 `~/.xray-script/clash/clash.yaml`。
+- `开启/刷新 HTTPS 远程订阅`：仅 SNI + Nginx 模式可用，使用现有 Nginx 静态提供订阅文件，不新增常驻服务。
+- `查看订阅信息`：显示本地 YAML 路径和当前订阅 URL。
+- `更换订阅 URL Token`：立即使旧 URL 失效。
+- `关闭 HTTPS 远程订阅`：移除远程入口，但保留本地 YAML。
+
+远程订阅 URL 形如 `https://domain/sub/<random-token>/clash.yaml`。订阅内容包含节点凭据，因此 URL 应视为密钥；如果怀疑泄露，请立即旋转 Token。
+
+当前生成器支持 Vision+Reality、VLESS+XHTTP+Reality、Fallback 与 SNI 中的兼容 VLESS 节点。Mihomo 当前不支持 VLESS+mKCP 和 Trojan+XHTTP，脚本不会为这两类组合生成伪兼容配置。
 
 ## 如何使用
 
