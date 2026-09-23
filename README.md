@@ -56,7 +56,7 @@
 
 8. v2026.09.23.4 修正 Clash/Mihomo 远程订阅与 Xray SNI 模式错误耦合的问题。
    1. Vision、XHTTP、Fallback、SNI 等兼容协议都可生成远程订阅，不再要求 `.xray.tag == SNI`。
-   2. 远程订阅托管与 Xray 数据链路解耦：已有 Nginx HTTPS 时优先复用；否则可选择启动轻量 HTTP 静态订阅服务。
+   2. 远程订阅托管与 Xray 数据链路解耦：已有 Nginx HTTPS 时优先复用；否则可选择启动轻量 HTTP 静态订阅服务，默认端口为 80，用户可自行输入其他端口。
    3. 轻量 HTTP 后端仅响应随机 Token 对应的 `clash.yaml`，无目录浏览和 Web 管理界面，并由 systemd 管理。
    4. HTTP 后端启动后会本机自检订阅 URL；端口冲突或服务启动失败时不会写入有效订阅状态。
    5. HTTP 订阅链路不加密，订阅包含节点凭据，脚本会在启用前明确提示风险。
@@ -111,7 +111,7 @@ SNI 配置中，CDN 的分享链接 Alpn 默认为 H2，如有 H3 需求，请�
 - `更换订阅 URL Token`：立即使旧 URL 失效。
 - `关闭远程订阅`：关闭当前订阅后端，但保留本地 YAML。
 
-远程订阅与 Xray 的 Vision/Reality/XHTTP 数据链路完全独立。已有 Nginx HTTPS 时 URL 形如 `https://domain/sub/<random-token>/clash.yaml`；没有可复用 HTTPS 站点时，可选择轻量 HTTP 后端，URL 形如 `http://server-ip:18080/sub/<random-token>/clash.yaml`。HTTP 不加密，订阅内容又包含节点凭据，因此只应在你接受这一风险时使用；如果怀疑 URL 泄露，请立即旋转 Token。
+远程订阅与 Xray 的 Vision/Reality/XHTTP 数据链路完全独立。已有 Nginx HTTPS 时 URL 形如 `https://domain/sub/<random-token>/clash.yaml`；没有可复用 HTTPS 站点时，可选择轻量 HTTP 后端。端口直接回车默认使用 `80`，也可手动输入 `1-65535` 的其他端口。80 端口时 URL 形如 `http://server-ip/sub/<random-token>/clash.yaml`；自定义端口时形如 `http://server-ip:<port>/sub/<random-token>/clash.yaml`。脚本不会自动替用户切换端口；所选端口被占用时会直接报错。HTTP 不加密，订阅内容又包含节点凭据，因此只应在你接受这一风险时使用；如果怀疑 URL 泄露，请立即旋转 Token。
 
 当前生成器支持 Vision+Reality、VLESS+XHTTP+Reality、Fallback 与 SNI 中的兼容 VLESS 节点。Mihomo 当前不支持 VLESS+mKCP 和 Trojan+XHTTP，脚本不会为这两类组合生成伪兼容配置。
 
