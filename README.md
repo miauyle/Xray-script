@@ -54,6 +54,11 @@
 
 ## 更新日志
 
+9. v2026.09.23.5 增强 Clash/Mihomo 轻量 HTTP 订阅启动诊断与自检可靠性。
+   1. 本机订阅自检强制绕过 `http_proxy/HTTP_PROXY`，避免 `127.0.0.1` 健康检查误走代理。
+   2. 启动后进行多次短间隔自检，减少 systemd 服务刚启动时的瞬时误判。
+   3. systemd 启动失败或本机自检失败时，直接输出 `systemctl status` 与最近的 `journalctl` 日志，再执行回滚。
+   4. 自检失败时同时显示目标端口的监听 socket，便于区分服务未启动与请求链路异常。
 8. v2026.09.23.4 修正 Clash/Mihomo 远程订阅与 Xray SNI 模式错误耦合的问题。
    1. Vision、XHTTP、Fallback、SNI 等兼容协议都可生成远程订阅，不再要求 `.xray.tag == SNI`。
    2. 远程订阅托管与 Xray 数据链路解耦：已有 Nginx HTTPS 时优先复用；否则可选择启动轻量 HTTP 静态订阅服务，默认端口为 80，用户可自行输入其他端口。

@@ -55,6 +55,11 @@
 
 ## Changelog
 
+9. v2026.09.23.5 improves startup diagnostics and self-test reliability for the lightweight Clash/Mihomo HTTP subscription backend.
+   1. Local subscription checks now force `curl --noproxy '*'` so `127.0.0.1` health checks cannot be redirected through `http_proxy/HTTP_PROXY`.
+   2. Startup performs several short retries to avoid false failures while the systemd service is still becoming ready.
+   3. On systemd startup or local self-test failure, the script prints `systemctl status` and recent `journalctl` output before rollback.
+   4. Self-test failures also display listeners on the selected port to distinguish a service-start problem from a request-path problem.
 8. v2026.09.23.4 fixes the incorrect coupling between Clash/Mihomo remote subscriptions and Xray SNI mode.
    1. Compatible Vision, XHTTP, Fallback, and SNI configs can all publish remote subscriptions; `.xray.tag == SNI` is no longer required.
    2. Subscription hosting is independent from the Xray data path: reuse an existing Nginx HTTPS site when available, otherwise optionally start a lightweight HTTP static subscription service on port 80 by default or a user-selected port.
