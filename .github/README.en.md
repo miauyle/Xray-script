@@ -55,6 +55,13 @@
 
 ## Changelog
 
+10. v2026.09.23.6 upgrades the Clash Verge Rev / Mihomo config generator to v2.
+   1. Enable HTTP/TLS/QUIC sniffing by default with common skip domains.
+   2. Add a manual `Proxy` group and an `Auto` URL-test group with 300s interval, lazy testing, 50ms tolerance, and HTTP 204 validation.
+   3. Enable `profile.store-selected`, `unified-delay`, and `tcp-concurrent`; disable IPv6 by default.
+   4. Enable automatic Mihomo GEO updates with the `memconservative` loader and MetaCubeX GeoIP/GeoSite data.
+   5. Add default rules for ad rejection, LAN direct, Steam/Microsoft China direct, CN domains/IPs direct, and send everything else to `Proxy`.
+   6. Do not force TUN/DNS into the subscription so local Clash Verge networking preferences remain client-managed.
 9. v2026.09.23.5 improves startup diagnostics and self-test reliability for the lightweight Clash/Mihomo HTTP subscription backend.
    1. Local subscription checks now force `curl --noproxy '*'` so `127.0.0.1` health checks cannot be redirected through `http_proxy/HTTP_PROXY`.
    2. Startup performs several short retries to avoid false failures while the systemd service is still becoming ready.
@@ -108,6 +115,15 @@ Implemented based on [VMessAEAD / VLESS share link proposal](https://github.com/
 In SNI configuration, CDN share links use H2 as default ALPN. If you need H3, modify it in your client.
 
 ### Clash Verge Rev / Mihomo
+
+**Config generator v2 defaults:**
+
+- Sniffer: HTTP / TLS / QUIC.
+- Policy groups: manual `Proxy` + `Auto` URL test.
+- GEO: automatic GeoIP / GeoSite updates.
+- Routing: reject ads, direct LAN, direct Steam/Microsoft China services, direct CN domains/IPs, then send the rest to `Proxy`.
+- IPv6 disabled by default; `unified-delay`, `tcp-concurrent`, and `profile.store-selected` enabled.
+- TUN / DNS are intentionally omitted and remain managed by the local Clash Verge client.
 
 The main menu now includes `Clash/Mihomo Config & Subscription`:
 
