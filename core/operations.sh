@@ -200,7 +200,7 @@ function handler_backup_list() {
 
 function handler_backup_restore() {
     local -a backups=()
-    local choice selected
+    local choice selected script_selected candidate_script=''
     mapfile -t backups < <(list_xray_backups_array)
     ((${#backups[@]} > 0)) || _error "No Xray backups found"
 
@@ -212,14 +212,26 @@ function handler_backup_restore() {
     ((choice >= 1 && choice <= ${#backups[@]})) || _error "Invalid backup index"
 
     selected="${backups[$((choice-1))]}"
+    script_selected="${selected/config-/script-}"
     XRAY_CONFIG="$(jq '.' "${selected}")" || _error "Selected backup is not valid JSON"
+
+    # v2026.09.23.9+ backups pair Xray config with script state; legacy backups remain supported.
+    if [[ -f "${script_selected}" ]]; then
+        candidate_script="$(jq '.' "${script_selected}")" || _error "Paired script-state backup is invalid JSON"
+        candidate_script="$(echo "${candidate_script}" | jq --arg version "$(echo "${SCRIPT_CONFIG}" | jq -r '.version')" '.version = $version')"
+    fi
+
     apply_xray_config "backup:restore:$(basename "${selected}")" "restart"
 
-    SCRIPT_CONFIG="$(echo "${SCRIPT_CONFIG}" | jq --argjson rules "$(echo "${XRAY_CONFIG}" | jq '.routing.rules // []')" '.rules = $rules')"
+    if [[ -n "${candidate_script}" ]]; then
+        SCRIPT_CONFIG="${candidate_script}"
+    else
+        SCRIPT_CONFIG="$(echo "${SCRIPT_CONFIG}" | jq --argjson rules "$(echo "${XRAY_CONFIG}" | jq '.routing.rules // []')" '.rules = $rules')"
+        ops_warn "This is a legacy Xray-only backup; protocol metadata in script config was not restored"
+    fi
     persist_script_config
     ops_info "Restored Xray backup: $(basename "${selected}")"
 }
-
 function handler_export_config() {
     local export_dir="${SCRIPT_CONFIG_DIR}/exports"
     local work export_file timestamp
@@ -260,8 +272,12 @@ function handler_import_config() {
     done <<<"${members}"
 
     work="$(mktemp -d)" || _error "Failed to create import workspace"
-    tar -xzf "${bundle}" -C "${work}" --no-same-owner ||
+    tar -xzf "${bundle}" -C "${work}" --no-same-owner --no-same-permissions ||
         { rm -rf "${work}"; _error "Failed to extract config bundle"; }
+    for member in manifest.json script-config.json xray-config.json; do
+        [[ -f "${work}/${member}" && ! -L "${work}/${member}" ]] ||
+            { rm -rf "${work}"; _error "Config bundle contains an invalid file type: ${member}"; }
+    done
 
     jq -e '.format == 1' "${work}/manifest.json" >/dev/null ||
         { rm -rf "${work}"; _error "Unsupported config bundle format"; }
@@ -350,6 +366,12 @@ function handler_doctor() {
 
     if [[ "$(echo "${SCRIPT_CONFIG}" | jq -r '.xray.warp // 0')" -eq 1 ]]; then
         local state ip trace
+        if ! command -v docker >/dev/null 2>&1; then
+            ops_fail "WARP configured but Docker is unavailable"
+            ((failures++))
+            echo "Doctor summary: failures=${failures}, warnings=${warnings}"
+            return 0
+        fi
         state="$(docker inspect -f '{{.State.Status}}' xray-script-warp 2>/dev/null || true)"
         if [[ "${state}" == 'running' ]]; then
             ops_pass "WARP container running"
