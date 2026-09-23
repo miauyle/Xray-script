@@ -101,7 +101,9 @@
       "info2": "管理屏蔽或 WARP 分流",
       "info3": "包含 Nginx 更新，修改域名，修改 Web 配置等",
       "info4": "(非 SNI 配置) 修改 Xray 监听端口，并自动重启服务",
-      "info5": "geodata 由 https://github.com/Loyalsoldier/v2ray-rules-dat  提供"
+      "info5": "geodata 由 https://github.com/Loyalsoldier/v2ray-rules-dat  提供",
+      "option7": "配置备份与恢复",
+      "info7": "查看/恢复 Xray 自动备份，或导出/导入配置包"
     },
     "route_management": {
       "title": "自定义分流",
@@ -173,6 +175,17 @@
       "info3": "显示本地 YAML 路径和当前远程订阅 URL",
       "info4": "生成新的随机 Token，旧订阅 URL 立即失效",
       "info5": "关闭当前远程订阅后端，保留本地 YAML"
+    },
+    "recovery": {
+      "title": "配置备份与恢复",
+      "option1": "查看 Xray 自动备份",
+      "option2": "恢复一个 Xray 备份",
+      "option3": "导出配置包",
+      "option4": "导入配置包",
+      "info1": "按时间从新到旧列出自动备份",
+      "info2": "恢复前会再次备份当前配置，并在重启失败时自动回滚",
+      "info3": "导出 Xray 配置和脚本配置到 tar.gz",
+      "info4": "校验配置包后导入，并执行 Xray 重启健康检查"
     }
   },
   "handler": {
@@ -215,6 +228,18 @@
       "clear_prompt": "确认清空规则组",
       "cleared": "规则组已清空，Xray 已重新加载配置",
       "cancelled": "操作已取消"
+    },
+    "recovery": {
+      "no_backups": "没有可用的 Xray 自动备份",
+      "restore_prompt": "请选择要恢复的备份编号",
+      "invalid_choice": "备份编号无效",
+      "invalid_backup": "备份中的 Xray 配置无效",
+      "restore_success": "Xray 备份恢复成功",
+      "export_success": "配置包已导出",
+      "import_prompt": "请输入要导入的 tar.gz 配置包路径",
+      "import_missing": "配置包不存在",
+      "import_invalid": "配置包格式无效或文件不完整",
+      "import_success": "配置包导入成功"
     }
   },
   "read": {
