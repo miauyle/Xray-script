@@ -64,6 +64,8 @@ readonly TRAFFIC_PATH="${TOOL_DIR}/traffic.sh"  # 流量统计脚本
 readonly GEODATA_PATH="${TOOL_DIR}/geodata.sh"  # GeoData 更新脚本
 # 定义外部配置文件和脚本的路径
 readonly XRAY_CONFIG_PATH="/usr/local/etc/xray/config.json"    # Xray 最终配置文件路径
+readonly XRAY_BACKUP_DIR="${SCRIPT_CONFIG_DIR}/backups/xray"    # Xray 配置自动备份目录
+readonly XRAY_BACKUP_KEEP=10                                    # 默认保留最近 10 份
 readonly SCRIPT_CONFIG_PATH="${SCRIPT_CONFIG_DIR}/config.json" # 脚本主配置文件路径
 readonly ACME_PATH="${HOME}/.acme.sh/acme.sh"                  # ACME.sh 脚本路径
 
@@ -593,6 +595,49 @@ function get_custom_site_json_by_index() {
 }
 
 # =============================================================================
+# 函数名称: backup_xray_config
+# 功能描述: 在覆盖正式 Xray 配置前创建时间戳备份，并仅保留最近 N 份。
+# =============================================================================
+function backup_xray_config() {
+    [[ -f "${XRAY_CONFIG_PATH}" ]] || return 0
+
+    mkdir -p "${XRAY_BACKUP_DIR}" || _error "Failed to create Xray backup directory"
+    chmod 700 "${XRAY_BACKUP_DIR}" || _error "Failed to secure Xray backup directory"
+
+    local timestamp temp_backup backup_path
+    timestamp="$(date '+%Y%m%d-%H%M%S')"
+    temp_backup="$(mktemp "${XRAY_BACKUP_DIR}/config-${timestamp}.XXXXXX")" || _error "Failed to create Xray config backup"
+    backup_path="${temp_backup}.json"
+
+    if ! cp -p "${XRAY_CONFIG_PATH}" "${temp_backup}"; then
+        rm -f "${temp_backup}"
+        _error "Failed to back up Xray configuration; original config was not modified"
+    fi
+    chmod 600 "${temp_backup}" || {
+        rm -f "${temp_backup}"
+        _error "Failed to secure Xray config backup; original config was not modified"
+    }
+    if ! mv "${temp_backup}" "${backup_path}"; then
+        rm -f "${temp_backup}"
+        _error "Failed to finalize Xray config backup; original config was not modified"
+    fi
+
+    local -a backups=()
+    local i
+    mapfile -t backups < <(
+        find "${XRAY_BACKUP_DIR}" -maxdepth 1 -type f -name 'config-*.json' -printf '%T@ %f\n' 2>/dev/null |
+            sort -nr |
+            cut -d' ' -f2-
+    )
+
+    for ((i = XRAY_BACKUP_KEEP; i < ${#backups[@]}; i++)); do
+        if ! rm -f "${XRAY_BACKUP_DIR}/${backups[${i}]}"; then
+            echo -e "${YELLOW}[$(echo "$I18N_DATA" | jq -r '.title.warn')]${NC} Failed to remove old Xray backup: ${backups[${i}]}" >&2
+        fi
+    done
+}
+
+# =============================================================================
 # 函数名称: persist_xray_config
 # 功能描述: 校验候选 Xray 配置并安全写入正式配置文件。
 # =============================================================================
@@ -606,6 +651,8 @@ function persist_xray_config() {
         XRAY_CONFIG="$(jq '.' "${XRAY_CONFIG_PATH}")"
         _error "Xray configuration validation failed; original config was kept"
     fi
+
+    backup_xray_config
 
     if ! cat "${temp_config}" >"${XRAY_CONFIG_PATH}"; then
         rm -f "${temp_config}"
@@ -1230,9 +1277,9 @@ function handler_xray_config() {
     XRAY_RULES="$(echo "${XRAY_CONFIG}" | jq '.routing.rules')"
     # 更新脚本配置中的路由规则
     SCRIPT_CONFIG="$(echo "${SCRIPT_CONFIG}" | jq --argjson rules "${XRAY_RULES}" '.rules = $rules')"
-    # 将更新后的脚本配置和 Xray 配置写入文件
+    # 统一执行 Xray 配置校验、自动备份和安全写入；成功后再保存脚本配置。
+    persist_xray_config
     echo "${SCRIPT_CONFIG}" >"${SCRIPT_CONFIG_PATH}" && sleep 2
-    echo "${XRAY_CONFIG}" >"${XRAY_CONFIG_PATH}" && sleep 2
 }
 
 # =============================================================================
@@ -1845,9 +1892,9 @@ function handler_warp() {
     fi
     # 更新脚本配置中的 WARP 状态
     SCRIPT_CONFIG=$(echo "${SCRIPT_CONFIG}" | jq --arg warp "${WARP_STATUS}" '.xray.warp = $warp')
-    # 将更新后的脚本配置和 Xray 配置写入文件
+    # 统一执行 Xray 配置校验、自动备份和安全写入；成功后再保存脚本配置。
+    persist_xray_config
     echo "${SCRIPT_CONFIG}" >"${SCRIPT_CONFIG_PATH}" && sleep 2
-    echo "${XRAY_CONFIG}" >"${XRAY_CONFIG_PATH}" && sleep 2
 }
 
 # =============================================================================

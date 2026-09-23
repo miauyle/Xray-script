@@ -396,7 +396,11 @@ function current_token() {
 }
 
 function generate_token_value() {
-    openssl rand -hex 24 || fail "$(msg token_failed)"
+    local raw token
+    raw="$(openssl rand -base64 16 2>/dev/null)" || fail "$(msg token_failed)"
+    token="$(printf '%s' "${raw}" | tr '+/' '-_' | tr -d '=[:space:]')"
+    [[ -n "${token}" ]] || fail "$(msg token_failed)"
+    printf '%s' "${token}"
 }
 
 function save_token() {

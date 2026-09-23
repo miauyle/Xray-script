@@ -55,6 +55,12 @@
 
 ## Changelog
 
+11. v2026.09.23.7 adds automatic Xray config backups and shorter Clash/Mihomo subscription tokens.
+   1. Before overwriting `/usr/local/etc/xray/config.json`, save the current config under `~/.xray-script/backups/xray/`.
+   2. Backups use timestamp + random-suffix names, mode `600`, with the backup directory set to `700`.
+   3. Keep only the latest 10 backups by default; failure to prune older backups warns but does not block the current config update.
+   4. If backup creation or permission hardening fails, abort the config change instead of overwriting the live config without a backup.
+   5. New Clash/Mihomo subscription tokens use 128-bit URL-safe Base64 and are about 22 characters long; existing long tokens are kept until the user rotates the subscription token.
 10. v2026.09.23.6 upgrades the Clash Verge Rev / Mihomo config generator to v2.
    1. Enable HTTP/TLS/QUIC sniffing by default with common skip domains.
    2. Add a manual `Proxy` group and an `Auto` URL-test group with 300s interval, lazy testing, 50ms tolerance, and HTTP 204 validation.
@@ -136,6 +142,18 @@ The main menu now includes `Clash/Mihomo Config & Subscription`:
 Remote subscription hosting is independent from the Vision/Reality/XHTTP data path. With an existing Nginx HTTPS site, URLs look like `https://domain/sub/<random-token>/clash.yaml`; without reusable HTTPS, the optional lightweight HTTP backend prompts for a port. Press Enter for the default port `80`, or enter another value from `1-65535`. Port 80 produces `http://server-ip/sub/<random-token>/clash.yaml`; a custom port produces `http://server-ip:<port>/sub/<random-token>/clash.yaml`. The script does not silently choose another port when the selected one is busy. Plain HTTP is unencrypted and the subscription contains proxy credentials, so use it only if you accept that risk and rotate the token if the URL may have leaked.
 
 The generator currently supports Vision+Reality, VLESS+XHTTP+Reality, Fallback, and compatible VLESS nodes in SNI mode. Mihomo does not currently support VLESS+mKCP or Trojan+XHTTP, so those combinations are rejected instead of generating misleading configs.
+
+## Automatic Xray config backups
+
+Before replacing the live Xray configuration, the script automatically saves the current version:
+
+- Live config: `/usr/local/etc/xray/config.json`
+- Backup directory: `~/.xray-script/backups/xray/`
+- Retention: latest 10 backups
+- No empty backup is created on first install when the live config does not exist yet
+- This version adds the backup mechanism only; there is no restore menu yet
+
+A backup creation or permission failure aborts the config change. Failure to prune an older backup only emits a warning.
 
 ## How to Use
 
