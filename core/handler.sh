@@ -68,6 +68,7 @@ readonly XRAY_CONFIG_PATH="/usr/local/etc/xray/config.json"    # Xray 最终配�
 readonly XRAY_BACKUP_DIR="${SCRIPT_CONFIG_DIR}/backups/xray"    # Xray 配置自动备份目录
 readonly XRAY_BACKUP_KEEP=10                                    # 默认保留最近 10 份
 readonly SCRIPT_CONFIG_PATH="${SCRIPT_CONFIG_DIR}/config.json" # 脚本主配置文件路径
+readonly SCRIPT_CONFIG_PENDING_PATH="${SCRIPT_CONFIG_DIR}/.pending-xray-script-config.json"
 readonly ACME_PATH="${HOME}/.acme.sh/acme.sh"                  # ACME.sh 脚本路径
 
 # --- 全局变量声明 ---
@@ -369,6 +370,33 @@ function persist_script_config() {
     sleep 1
 }
 
+function snapshot_script_config_for_xray_change() {
+    [[ -f "${XRAY_CONFIG_PATH}" && -f "${SCRIPT_CONFIG_PATH}" ]] || return 0
+
+    # 上一次协议变更若中途退出，先恢复其旧状态，再开启新的事务。
+    if [[ -f "${SCRIPT_CONFIG_PENDING_PATH}" ]]; then
+        SCRIPT_CONFIG="$(jq '.' "${SCRIPT_CONFIG_PENDING_PATH}")" || _error "Pending script-state snapshot is invalid"
+        persist_script_config
+        rm -f "${SCRIPT_CONFIG_PENDING_PATH}"
+    fi
+
+    cp -p "${SCRIPT_CONFIG_PATH}" "${SCRIPT_CONFIG_PENDING_PATH}" ||
+        _error "Failed to snapshot script config before Xray change"
+    chmod 600 "${SCRIPT_CONFIG_PENDING_PATH}" ||
+        _error "Failed to secure pending script-state snapshot"
+}
+
+function restore_pending_script_config() {
+    [[ -f "${SCRIPT_CONFIG_PENDING_PATH}" ]] || return 0
+    SCRIPT_CONFIG="$(jq '.' "${SCRIPT_CONFIG_PENDING_PATH}")" || return 1
+    persist_script_config || return 1
+    rm -f "${SCRIPT_CONFIG_PENDING_PATH}"
+}
+
+function clear_pending_script_config() {
+    rm -f "${SCRIPT_CONFIG_PENDING_PATH}"
+}
+
 function get_custom_site_socket_name() {
     local domain="$1"
     local port="$2"
@@ -608,6 +636,7 @@ function get_custom_site_json_by_index() {
 # 功能描述: 在覆盖正式 Xray 配置前创建时间戳备份，并仅保留最近 N 份。
 # =============================================================================
 function backup_xray_config() {
+    local context="${1:-unspecified}"
     [[ -f "${XRAY_CONFIG_PATH}" ]] || return 0
 
     mkdir -p "${XRAY_BACKUP_DIR}" || _error "Failed to create Xray backup directory"
@@ -633,8 +662,12 @@ function backup_xray_config() {
     fi
 
     # 同步保存脚本状态，供恢复菜单成对还原协议/端口/routing/WARP 等元数据。
-    if [[ -f "${SCRIPT_CONFIG_PATH}" ]]; then
-        if ! cp -p "${SCRIPT_CONFIG_PATH}" "${script_backup_path}"; then
+    local script_backup_source="${SCRIPT_CONFIG_PATH}"
+    if [[ "${context}" == xray:regenerate* && -f "${SCRIPT_CONFIG_PENDING_PATH}" ]]; then
+        script_backup_source="${SCRIPT_CONFIG_PENDING_PATH}"
+    fi
+    if [[ -f "${script_backup_source}" ]]; then
+        if ! cp -p "${script_backup_source}" "${script_backup_path}"; then
             rm -f "${backup_path}" "${script_backup_path}"
             _error "Failed to back up script state; original Xray config was not modified"
         fi
@@ -698,6 +731,16 @@ function rollback_xray_config() {
 
     mv -f "${temp_config}" "${XRAY_CONFIG_PATH}" || return 1
     XRAY_CONFIG="$(jq '.' "${XRAY_CONFIG_PATH}")" || return 1
+
+    local script_backup="${backup_path/config-/script-}"
+    if [[ -f "${script_backup}" ]]; then
+        SCRIPT_CONFIG="$(jq '.' "${script_backup}")" || return 1
+        persist_script_config || return 1
+    elif [[ "${context}" == xray:regenerate* && -f "${SCRIPT_CONFIG_PENDING_PATH}" ]]; then
+        restore_pending_script_config || return 1
+    fi
+    clear_pending_script_config
+
     restart_xray_service_checked || return 1
     echo -e "${YELLOW}[$(echo "$I18N_DATA" | jq -r '.title.warn')]${NC} Xray apply failed and was rolled back [${context}]" >&2
     return 0
@@ -731,6 +774,9 @@ function apply_xray_config() {
         else
             XRAY_CONFIG=''
         fi
+        if [[ "${context}" == xray:regenerate* ]]; then
+            restore_pending_script_config || true
+        fi
         _error "Xray configuration validation failed; original config was kept [${context}]"
     fi
 
@@ -741,7 +787,7 @@ function apply_xray_config() {
             { rm -f "${temp_config}"; _error "Failed to preserve Xray config ownership [${context}]"; }
     fi
 
-    backup_xray_config
+    backup_xray_config "${context}"
 
     if ! mv -f "${temp_config}" "${XRAY_CONFIG_PATH}"; then
         rm -f "${temp_config}"
@@ -758,6 +804,10 @@ function apply_xray_config() {
             fi
             _error "Xray restart failed and automatic rollback was unavailable [${context}]"
         fi
+    fi
+
+    if [[ "${context}" == xray:regenerate* ]]; then
+        clear_pending_script_config
     fi
 }
 
@@ -1163,6 +1213,8 @@ function handler_update_ocsp_config() {
 function handler_script_config() {
     # 打印绿色的配置更新提示
     echo -e "${GREEN}[$(echo "$I18N_DATA" | jq -r '.title.config')]${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.script.config_update")" >&2
+    # 协议/核心配置修改跨多个 handler 进程，先保存旧脚本状态用于事务 rollback。
+    snapshot_script_config_for_xray_change
     # 重置脚本配置 (默认重置 xray 部分)
     handler_reset_script_config
     # 从 CONFIG_DATA 或生成器获取配置值
