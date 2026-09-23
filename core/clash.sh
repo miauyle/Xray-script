@@ -6,9 +6,9 @@
 #   https://github.com/miauyle/Xray-script
 # =============================================================================
 # 脚本名称: clash.sh
-# 功能描述: 生成 Clash Verge Rev / Mihomo 配置，并在 SNI + Nginx 场景下发布 HTTPS 订阅。
+# 功能描述: 生成 Clash Verge Rev / Mihomo 配置，并通过可用的静态 HTTP(S) 后端发布订阅。
 # 维护者: miauyle
-# 依赖: bash, jq, curl, openssl, nginx (远程订阅时)
+# 依赖: bash, jq, curl, openssl；远程订阅复用 Nginx 或 Python 3 标准库
 # =============================================================================
 
 PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin:/snap/bin
@@ -28,6 +28,10 @@ readonly I18N_DIR="${PROJECT_ROOT}/i18n"
 readonly CLASH_DIR="${SCRIPT_CONFIG_DIR}/clash"
 readonly CLASH_CONFIG_PATH="${CLASH_DIR}/clash.yaml"
 readonly CLASH_TOKEN_PATH="${CLASH_DIR}/subscription.token"
+readonly CLASH_STATE_PATH="${CLASH_DIR}/subscription.json"
+readonly CLASH_HTTP_SERVER_PATH="${CUR_DIR}/clash_http_server.py"
+readonly CLASH_HTTP_SERVICE="/etc/systemd/system/xray-clash-subscription.service"
+readonly CLASH_HTTP_PORT="${CLASH_HTTP_PORT:-18080}"
 readonly NGINX_CONFIG_DIR="/usr/local/nginx/conf"
 readonly NGINX_SUB_CONFIG="${NGINX_CONFIG_DIR}/nginxconfig.io/clash-subscription.conf"
 
@@ -313,6 +317,22 @@ function save_token() {
     chmod 600 "${CLASH_TOKEN_PATH}"
 }
 
+function save_state() {
+    local backend="$1"
+    local host="$2"
+    local port="$3"
+    mkdir -p "${CLASH_DIR}"
+    chmod 700 "${CLASH_DIR}"
+    jq -n --arg backend "${backend}" --arg host "${host}" --argjson port "${port}"         '{backend:$backend,host:$host,port:$port}' >"${CLASH_STATE_PATH}" || fail "$(msg state_failed)"
+    chmod 600 "${CLASH_STATE_PATH}"
+}
+
+function state_value() {
+    local key="$1"
+    [[ -s "${CLASH_STATE_PATH}" ]] || return 1
+    jq -r --arg key "${key}" '.[$key] // empty' "${CLASH_STATE_PATH}"
+}
+
 function subscription_domain() {
     local domain
     domain="$(echo "${SCRIPT_CONFIG}" | jq -r '.nginx.domain // empty')"
@@ -320,12 +340,35 @@ function subscription_domain() {
     printf '%s' "${domain}"
 }
 
-function subscription_url() {
-    local token domain
-    token="$(current_token)"
+function nginx_subscription_available() {
+    local domain
+    command -v nginx >/dev/null 2>&1 || return 1
     domain="$(subscription_domain)"
-    [[ -n "${token}" && -n "${domain}" ]] || return 1
-    printf 'https://%s/sub/%s/clash.yaml' "${domain}" "${token}"
+    [[ -n "${domain}" ]] || return 1
+    [[ -f "${NGINX_CONFIG_DIR}/sites-available/${domain}.conf" ]] || return 1
+    return 0
+}
+
+function subscription_url() {
+    local token backend host port
+    token="$(current_token)"
+    backend="$(state_value backend 2>/dev/null || true)"
+    host="$(state_value host 2>/dev/null || true)"
+    port="$(state_value port 2>/dev/null || true)"
+    [[ -n "${token}" && -n "${backend}" && -n "${host}" ]] || return 1
+
+    case "${backend}" in
+    nginx)
+        printf 'https://%s/sub/%s/clash.yaml' "${host}" "${token}"
+        ;;
+    http)
+        [[ -n "${port}" ]] || return 1
+        printf 'http://%s:%s/sub/%s/clash.yaml' "${host}" "${port}" "${token}"
+        ;;
+    *)
+        return 1
+        ;;
+    esac
 }
 
 function ensure_site_include() {
@@ -436,91 +479,235 @@ function publish_nginx_subscription() {
     return 0
 }
 
-function enable_remote() {
-    local tag token rc
-    tag="$(echo "${SCRIPT_CONFIG}" | jq -r '.xray.tag // empty | ascii_downcase')"
-    [[ "${tag}" == 'sni' ]] || fail "$(msg remote_requires_sni)"
-    command -v nginx >/dev/null 2>&1 || fail "$(msg nginx_missing)"
+function http_service_active() {
+    systemctl -q is-active xray-clash-subscription 2>/dev/null
+}
 
+function write_http_service() {
+    local python_bin
+    python_bin="$(command -v python3)" || return 1
+    [[ -f "${CLASH_HTTP_SERVER_PATH}" ]] || return 1
+
+    cat >"${CLASH_HTTP_SERVICE}" <<EOF_SERVICE
+[Unit]
+Description=Xray-script Clash/Mihomo subscription server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=${python_bin} ${CLASH_HTTP_SERVER_PATH} --bind 0.0.0.0 --port ${CLASH_HTTP_PORT} --token-file ${CLASH_TOKEN_PATH} --yaml-file ${CLASH_CONFIG_PATH}
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+EOF_SERVICE
+}
+
+function http_port_available() {
+    local python_bin
+    http_service_active && return 0
+    python_bin="$(command -v python3)" || return 1
+    "${python_bin}" - "${CLASH_HTTP_PORT}" <<'PY' >/dev/null 2>&1
+import socket
+import sys
+port = int(sys.argv[1])
+s = socket.socket()
+try:
+    s.bind(("0.0.0.0", port))
+finally:
+    s.close()
+PY
+}
+
+function publish_http_subscription() {
+    local token="$1"
+    local old_token='' had_token=0
+
+    command -v python3 >/dev/null 2>&1 || return 1
+    http_port_available || return 2
+    [[ -s "${CLASH_TOKEN_PATH}" ]] && {
+        old_token="$(current_token)"
+        had_token=1
+    }
+
+    save_token "${token}"
+    write_http_service || {
+        if [[ "${had_token}" -eq 1 ]]; then save_token "${old_token}"; else rm -f "${CLASH_TOKEN_PATH}"; fi
+        return 1
+    }
+
+    systemctl daemon-reload || {
+        if [[ "${had_token}" -eq 1 ]]; then save_token "${old_token}"; else rm -f "${CLASH_TOKEN_PATH}"; fi
+        return 1
+    }
+    systemctl enable xray-clash-subscription >/dev/null 2>&1 || true
+    if ! systemctl restart xray-clash-subscription; then
+        if [[ "${had_token}" -eq 1 ]]; then save_token "${old_token}"; else rm -f "${CLASH_TOKEN_PATH}"; fi
+        systemctl disable --now xray-clash-subscription >/dev/null 2>&1 || true
+        return 3
+    fi
+    systemctl -q is-active xray-clash-subscription || return 3
+    return 0
+}
+
+function disable_nginx_subscription() {
+    local backup=''
+    local had_config=0
+
+    [[ -f "${NGINX_SUB_CONFIG}" ]] || return 0
+    mkdir -p "${CLASH_DIR}"
+    backup="$(mktemp "${CLASH_DIR}/subscription.conf.bak.XXXXXX")" || return 1
+    cp -af "${NGINX_SUB_CONFIG}" "${backup}"
+    had_config=1
+    printf '%s\n' '# Clash/Mihomo remote subscription is disabled.' >"${NGINX_SUB_CONFIG}"
+
+    if command -v nginx >/dev/null 2>&1; then
+        if ! nginx -t >/dev/null 2>&1; then
+            [[ "${had_config}" -eq 1 ]] && cp -af "${backup}" "${NGINX_SUB_CONFIG}"
+            rm -f "${backup}"
+            return 2
+        fi
+        if systemctl -q is-active nginx && ! systemctl reload nginx; then
+            [[ "${had_config}" -eq 1 ]] && cp -af "${backup}" "${NGINX_SUB_CONFIG}"
+            nginx -t >/dev/null 2>&1 && systemctl reload nginx >/dev/null 2>&1 || true
+            rm -f "${backup}"
+            return 3
+        fi
+    fi
+
+    rm -f "${backup}"
+    return 0
+}
+
+function disable_http_subscription() {
+    if [[ -f "${CLASH_HTTP_SERVICE}" ]] || systemctl list-unit-files xray-clash-subscription.service >/dev/null 2>&1; then
+        systemctl disable --now xray-clash-subscription >/dev/null 2>&1 || true
+        rm -f "${CLASH_HTTP_SERVICE}"
+        systemctl daemon-reload >/dev/null 2>&1 || true
+        systemctl reset-failed xray-clash-subscription >/dev/null 2>&1 || true
+    fi
+}
+
+function confirm_http_fallback() {
+    warn "$(msg http_warning)"
+    printf "%s [y/N]: " "$(msg http_prompt)" >&2
+    local confirm
+    read -r confirm
+    case "${confirm,,}" in
+    y | yes) return 0 ;;
+    *) return 1 ;;
+    esac
+}
+
+function enable_remote() {
+    local token rc host
     generate_yaml
     token="$(current_token)"
     [[ -n "${token}" ]] || token="$(generate_token_value)"
-    publish_nginx_subscription "${token}"
-    rc=$?
-    case "${rc}" in
-    0) save_token "${token}" ;;
-    2) fail "$(msg nginx_validation_failed)" ;;
-    *) fail "$(msg nginx_update_failed)" ;;
-    esac
+
+    if nginx_subscription_available; then
+        publish_nginx_subscription "${token}"
+        rc=$?
+        case "${rc}" in
+        0)
+            save_token "${token}"
+            host="$(subscription_domain)"
+            save_state 'nginx' "${host}" 443
+            ;;
+        2) fail "$(msg nginx_validation_failed)" ;;
+        *) fail "$(msg nginx_update_failed)" ;;
+        esac
+    else
+        command -v python3 >/dev/null 2>&1 || fail "$(msg remote_backend_missing)"
+        confirm_http_fallback || fail "$(msg cancelled)"
+        publish_http_subscription "${token}"
+        rc=$?
+        case "${rc}" in
+        0)
+            host="$(get_public_ip)"
+            save_state 'http' "${host}" "${CLASH_HTTP_PORT}"
+            ;;
+        2) fail "$(msg http_port_busy): ${CLASH_HTTP_PORT}" ;;
+        *) fail "$(msg http_service_failed)" ;;
+        esac
+    fi
     show_info
 }
 
 function rotate_remote() {
-    local tag token rc
-    tag="$(echo "${SCRIPT_CONFIG}" | jq -r '.xray.tag // empty | ascii_downcase')"
-    [[ "${tag}" == 'sni' ]] || fail "$(msg remote_requires_sni)"
-    command -v nginx >/dev/null 2>&1 || fail "$(msg nginx_missing)"
+    local backend token rc host port
+    backend="$(state_value backend 2>/dev/null || true)"
+    [[ -n "${backend}" ]] || fail "$(msg remote_not_enabled)"
     [[ -f "${CLASH_CONFIG_PATH}" ]] || generate_yaml
     token="$(generate_token_value)"
-    publish_nginx_subscription "${token}"
-    rc=$?
-    case "${rc}" in
-    0) save_token "${token}" ;;
-    2) fail "$(msg nginx_validation_failed)" ;;
-    *) fail "$(msg nginx_update_failed)" ;;
+
+    case "${backend}" in
+    nginx)
+        publish_nginx_subscription "${token}"
+        rc=$?
+        case "${rc}" in
+        0)
+            save_token "${token}"
+            host="$(subscription_domain)"
+            save_state 'nginx' "${host}" 443
+            ;;
+        2) fail "$(msg nginx_validation_failed)" ;;
+        *) fail "$(msg nginx_update_failed)" ;;
+        esac
+        ;;
+    http)
+        save_token "${token}"
+        host="$(state_value host)"
+        port="$(state_value port)"
+        save_state 'http' "${host}" "${port}"
+        ;;
+    *)
+        fail "$(msg remote_backend_missing)"
+        ;;
     esac
     show_info
 }
 
 function disable_remote() {
-    local backup=''
-    local had_config=0
-    mkdir -p "${CLASH_DIR}"
-    chmod 700 "${CLASH_DIR}"
+    local backend rc
+    backend="$(state_value backend 2>/dev/null || true)"
 
-    if [[ -f "${NGINX_SUB_CONFIG}" ]]; then
-        backup="$(mktemp "${CLASH_DIR}/subscription.conf.bak.XXXXXX")" || fail "$(msg temp_failed)"
-        cp -af "${NGINX_SUB_CONFIG}" "${backup}"
-        had_config=1
-    fi
+    case "${backend}" in
+    nginx)
+        disable_nginx_subscription
+        rc=$?
+        case "${rc}" in
+        0) ;;
+        2) fail "$(msg nginx_validation_failed)" ;;
+        *) fail "$(msg nginx_update_failed)" ;;
+        esac
+        ;;
+    http)
+        disable_http_subscription
+        ;;
+    *)
+        disable_http_subscription
+        ;;
+    esac
 
-    mkdir -p "$(dirname "${NGINX_SUB_CONFIG}")"
-    printf '%s\n' '# Clash/Mihomo remote subscription is disabled.' >"${NGINX_SUB_CONFIG}"
-
-    if command -v nginx >/dev/null 2>&1; then
-        if ! nginx -t >/dev/null 2>&1; then
-            if [[ "${had_config}" -eq 1 ]]; then
-                cp -af "${backup}" "${NGINX_SUB_CONFIG}"
-            else
-                rm -f "${NGINX_SUB_CONFIG}"
-            fi
-            rm -f "${backup}"
-            fail "$(msg nginx_validation_failed)"
-        fi
-
-        if systemctl -q is-active nginx && ! systemctl reload nginx; then
-            if [[ "${had_config}" -eq 1 ]]; then
-                cp -af "${backup}" "${NGINX_SUB_CONFIG}"
-            else
-                rm -f "${NGINX_SUB_CONFIG}"
-            fi
-            nginx -t >/dev/null 2>&1 && systemctl reload nginx >/dev/null 2>&1 || true
-            rm -f "${backup}"
-            fail "$(msg nginx_update_failed)"
-        fi
-    fi
-
-    rm -f "${backup}" "${CLASH_TOKEN_PATH}"
+    rm -f "${CLASH_TOKEN_PATH}" "${CLASH_STATE_PATH}"
     info "$(msg remote_disabled)"
 }
 
 function show_info() {
+    local backend url
     echo -e "${GREEN}Clash / Mihomo${NC}"
     echo "$(msg local_file): ${CLASH_CONFIG_PATH}"
-    if [[ -s "${CLASH_TOKEN_PATH}" ]]; then
-        local url
+    backend="$(state_value backend 2>/dev/null || true)"
+    if [[ -s "${CLASH_TOKEN_PATH}" && -n "${backend}" ]]; then
         url="$(subscription_url 2>/dev/null || true)"
         [[ -n "${url}" ]] && echo "$(msg remote_url): ${url}"
+        echo "$(msg remote_backend): ${backend}"
+        [[ "${backend}" == 'http' ]] && warn "$(msg http_warning)"
     else
         echo "$(msg remote_url): $(msg disabled)"
     fi
