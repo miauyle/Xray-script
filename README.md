@@ -60,7 +60,8 @@
    3. WARP 新增容器/SOCKS/出口 IP/国家检测，并支持基于 Xray observatory + balancer 的 Direct fallback。
    4. Routing 扩展为 Direct/WARP/Block 统一管理，新增 Direct IP/Domain，并同步持久化规则状态。
    5. Direct 出站支持 Auto/IPv4/IPv6；重新生成协议配置时保留 Direct family 与 WARP fallback。
-   6. 主菜单新增“运维与诊断”，集中提供上述能力。
+   6. 主菜单新增“运维与诊断”，集中提供上述能力；自动备份同时保存脚本状态，协议重配失败可成对回滚。
+   7. 新增轻量 CI，对核心 Shell、JSON 与 Clash HTTP Python 服务做语法校验。
 12. v2026.09.23.8 引入统一 `apply_xray_config` 安全写入入口，并首先迁移 routing 配置修改。
    1. 候选配置先写入与正式配置同目录的临时文件，再由 `xray run -test -format=json` 校验。
    2. 校验通过后自动备份当前配置，并保留正式配置原有的权限和 owner/group。
@@ -166,6 +167,32 @@ SNI 配置中，CDN 的分享链接 Alpn 默认为 H2，如有 H3 需求，请�
 - 当前版本只提供自动备份机制，暂不提供恢复菜单
 
 备份失败会直接终止本次配置修改；旧备份清理失败只会输出警告，不影响已经创建的新备份。
+
+
+## 运维与诊断
+
+主菜单 **11. 运维与诊断** 集中提供日常维护能力：
+
+- **Doctor**：检查 Xray JSON/核心校验、systemd 状态、监听端口、自动备份、WARP 容器与 SOCKS 出口、WARP fallback 结构、Clash HTTP 订阅服务。
+- **日志**：显示 Xray systemd/error.log、WARP Docker 日志和 Clash 订阅服务日志。
+- **WARP 状态与出口**：通过 WARP SOCKS 请求 Cloudflare trace，显示容器状态、出口 IP、国家/地区和 WARP 状态。
+- **WARP Direct fallback**：使用 Xray `observatory + balancer.fallbackTag=direct`，WARP 被观测为不可用时回退 Direct；只影响明确配置为 WARP 的规则。
+- **备份恢复**：Xray 正式配置修改前自动备份，默认保留 10 份。新备份同时保存脚本状态；旧版仅 Xray 的备份仍可恢复。
+- **导出/导入**：将脚本配置和 Xray 配置打包为权限 `600` 的 `tar.gz`，用于手工迁移或额外留档。WARP 容器网络属于机器本地状态，迁移到其他 VPS 后建议运行 Doctor/WARP reset 重新确认。
+- **Direct 出口 family**：可选 Auto / IPv4 / IPv6，对 Freedom outbound 使用 Xray `sockopt.domainStrategy`。
+
+### 安全写入与自动回滚
+
+所有 Xray 配置修改统一经过 `apply_xray_config`：
+
+```text
+候选配置 → xray -test → 自动备份 → 同目录原子替换 → 重启检查
+                                                ↓ 失败
+                                      自动恢复旧配置与脚本状态
+```
+
+Routing、协议重生成、WARP 开关/重置、备份恢复、导入和 Direct/WARP fallback 均复用这条路径。协议重配跨多个脚本进程时会保存 pending script-state，只有新 Xray 配置成功应用后才清除，避免 Xray 已回滚但脚本元数据仍停留在新配置。
+
 
 ## 如何使用
 
