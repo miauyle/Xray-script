@@ -478,6 +478,19 @@ function processes_config() {
     esac
 }
 
+function processes_clash_subscription() {
+    exec_menu '--clash'
+    local choose=$(echo $?)
+    case ${choose} in
+    1) exec_handler '--clash' 'generate' ;;
+    2) exec_handler '--clash' 'enable' ;;
+    3) exec_handler '--clash' 'show' ;;
+    4) exec_handler '--clash' 'rotate' ;;
+    5) exec_handler '--clash' 'disable' ;;
+    *) return 0 ;;
+    esac
+}
+
 # =============================================================================
 # 函数名称: processes_index
 # 功能描述: 处理脚本主界面的流程。
@@ -507,6 +520,7 @@ function processes_index() {
     7) exec_handler '--share' ;;      # 选择 7：显示分享链接
     8) exec_handler '--traffic' ;;    # 选择 8：显示流量统计
     9) processes_config ;;            # 选择 9：进入配置管理流程
+    10) processes_clash_subscription ;; # 选择 10：Clash/Mihomo 配置与订阅
     *) exit 0 ;;                      # 其他情况：退出脚本
     esac
 }
