@@ -221,15 +221,17 @@ function handler_backup_restore() {
         candidate_script="$(echo "${candidate_script}" | jq --arg version "$(echo "${SCRIPT_CONFIG}" | jq -r '.version')" '.version = $version')"
     fi
 
-    apply_xray_config "backup:restore:$(basename "${selected}")" "restart"
-
     if [[ -n "${candidate_script}" ]]; then
+        snapshot_script_config_for_xray_change
         SCRIPT_CONFIG="${candidate_script}"
+        persist_script_config
+        apply_xray_config "xray:regenerate:backup-restore:$(basename "${selected}")" "restart"
     else
+        apply_xray_config "backup:restore:$(basename "${selected}")" "restart"
         SCRIPT_CONFIG="$(echo "${SCRIPT_CONFIG}" | jq --argjson rules "$(echo "${XRAY_CONFIG}" | jq '.routing.rules // []')" '.rules = $rules')"
+        persist_script_config
         ops_warn "This is a legacy Xray-only backup; protocol metadata in script config was not restored"
     fi
-    persist_script_config
     ops_info "Restored Xray backup: $(basename "${selected}")"
 }
 function handler_export_config() {
@@ -287,9 +289,10 @@ function handler_import_config() {
     XRAY_CONFIG="$(jq '.' "${work}/xray-config.json")" ||
         { rm -rf "${work}"; _error "Invalid Xray config in bundle"; }
 
-    apply_xray_config "bundle:import" "restart"
+    snapshot_script_config_for_xray_change
     SCRIPT_CONFIG="${candidate_script}"
     persist_script_config
+    apply_xray_config "xray:regenerate:bundle-import" "restart"
     rm -rf "${work}"
     ops_info "Config bundle imported successfully"
 }
