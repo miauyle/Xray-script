@@ -721,7 +721,10 @@ function show_info() {
         url="$(subscription_url 2>/dev/null || true)"
         [[ -n "${url}" ]] && echo "$(msg remote_url): ${url}"
         echo "$(msg remote_backend): ${backend}"
-        [[ "${backend}" == 'http' ]] && warn "$(msg http_warning)"
+        if [[ "${backend}" == 'http' ]]; then
+            warn "$(msg http_warning)"
+            warn "$(msg http_firewall_hint): $(state_value port)"
+        fi
     else
         echo "$(msg remote_url): $(msg disabled)"
     fi
