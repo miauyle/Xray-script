@@ -1357,6 +1357,11 @@ function handler_x25519_config() {
 # =============================================================================
 function handler_xray_config() {
     local apply_mode="${1:-apply}"
+    local pending_guard=0
+    if [[ "${apply_mode}" != 'defer' && -f "${SCRIPT_CONFIG_PENDING_PATH}" ]]; then
+        trap '[[ -f "${SCRIPT_CONFIG_PENDING_PATH}" ]] && restore_pending_script_config >/dev/null 2>&1 || true' EXIT
+        pending_guard=1
+    fi
     # 打印绿色的 Xray 配置更新提示
     echo -e "${GREEN}[$(echo "$I18N_DATA" | jq -r '.title.config')]${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.xray.config_update")" >&2
     # 从脚本配置中读取各项参数
@@ -1494,6 +1499,7 @@ function handler_xray_config() {
     *) apply_xray_config "xray:regenerate" ;;
     esac
     persist_script_config
+    [[ "${pending_guard}" -eq 1 ]] && trap - EXIT
 }
 
 # =============================================================================
