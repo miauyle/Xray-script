@@ -583,6 +583,7 @@
     "old_backend_cleanup_failed": "新订阅后端已启用，但旧订阅后端清理失败，请手动检查",
     "http_firewall_hint": "如果外部无法访问订阅，请确认 VPS/云安全组已放行该 TCP 端口",
     "http_port_prompt": "请输入 HTTP 订阅端口，直接回车使用默认端口",
-    "http_port_invalid": "HTTP 订阅端口无效，请输入 1-65535"
+    "http_port_invalid": "HTTP 订阅端口无效，请输入 1-65535",
+    "http_self_test_failed": "轻量 HTTP 订阅服务已启动，但本机订阅自检失败；上方已输出 systemd/journal 诊断信息"
   }
 }
