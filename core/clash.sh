@@ -547,6 +547,27 @@ finally:
 PY
 }
 
+function print_http_service_diagnostics() {
+    echo -e "${YELLOW}----- xray-clash-subscription status -----${NC}" >&2
+    systemctl status xray-clash-subscription --no-pager -l >&2 2>/dev/null || true
+    echo -e "${YELLOW}----- recent journal -----${NC}" >&2
+    journalctl -u xray-clash-subscription -n 30 --no-pager -o cat >&2 2>/dev/null || true
+}
+
+function wait_http_subscription() {
+    local token="$1"
+    local port="$2"
+    local attempt
+
+    for attempt in 1 2 3 4 5 6 7 8 9 10; do
+        if curl --noproxy '*' -fsS --max-time 2 "http://127.0.0.1:${port}/sub/${token}/clash.yaml" >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 0.3
+    done
+    return 1
+}
+
 function restore_http_service() {
     local backup="$1"
     local had_service="$2"
@@ -595,13 +616,32 @@ function publish_http_subscription() {
     }
     systemctl enable xray-clash-subscription >/dev/null 2>&1 || true
 
-    if ! systemctl restart xray-clash-subscription ||
-       ! systemctl -q is-active xray-clash-subscription ||
-       ! curl -fsS --max-time 5 "http://127.0.0.1:${port}/sub/${token}/clash.yaml" >/dev/null 2>&1; then
+    if ! systemctl restart xray-clash-subscription; then
+        print_http_service_diagnostics
         if [[ "${had_token}" -eq 1 ]]; then save_token "${old_token}"; else rm -f "${CLASH_TOKEN_PATH}"; fi
         restore_http_service "${backup_service}" "${had_service}"
         rm -f "${backup_service}"
         return 3
+    fi
+
+    if ! systemctl -q is-active xray-clash-subscription; then
+        print_http_service_diagnostics
+        if [[ "${had_token}" -eq 1 ]]; then save_token "${old_token}"; else rm -f "${CLASH_TOKEN_PATH}"; fi
+        restore_http_service "${backup_service}" "${had_service}"
+        rm -f "${backup_service}"
+        return 3
+    fi
+
+    if ! wait_http_subscription "${token}" "${port}"; then
+        print_http_service_diagnostics
+        if command -v ss >/dev/null 2>&1; then
+            echo -e "${YELLOW}----- listening sockets on port ${port} -----${NC}" >&2
+            ss -ltnp 2>/dev/null | grep -E "[:.]${port}([[:space:]]|$)" >&2 || true
+        fi
+        if [[ "${had_token}" -eq 1 ]]; then save_token "${old_token}"; else rm -f "${CLASH_TOKEN_PATH}"; fi
+        restore_http_service "${backup_service}" "${had_service}"
+        rm -f "${backup_service}"
+        return 4
     fi
 
     rm -f "${backup_service}"
@@ -693,6 +733,7 @@ function enable_remote() {
             fi
             ;;
         2) fail "$(msg http_port_busy): ${http_port}" ;;
+        4) fail "$(msg http_self_test_failed)" ;;
         *) fail "$(msg http_service_failed)" ;;
         esac
     fi
