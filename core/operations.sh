@@ -90,6 +90,7 @@ function handler_warp_fallback() {
         ')"
         SCRIPT_CONFIG="$(echo "${SCRIPT_CONFIG}" | jq '.xray.warp_fallback = 0')"
         apply_xray_config "warp:fallback:disable" "restart"
+        SCRIPT_CONFIG="$(echo "${SCRIPT_CONFIG}" | jq --argjson rules "$(echo "${XRAY_CONFIG}" | jq '.routing.rules // []')" '.rules = $rules')"
         persist_script_config
         ops_info "WARP direct fallback disabled"
         return 0
@@ -127,6 +128,7 @@ function handler_warp_fallback() {
     ')"
     SCRIPT_CONFIG="$(echo "${SCRIPT_CONFIG}" | jq '.xray.warp_fallback = 1')"
     apply_xray_config "warp:fallback:enable" "restart"
+    SCRIPT_CONFIG="$(echo "${SCRIPT_CONFIG}" | jq --argjson rules "$(echo "${XRAY_CONFIG}" | jq '.routing.rules // []')" '.rules = $rules')"
     persist_script_config
     ops_info "WARP direct fallback enabled (observatory + balancer fallbackTag=direct)"
 }
@@ -247,12 +249,15 @@ function handler_import_config() {
     fi
     [[ -f "${bundle}" ]] || _error "Config bundle not found: ${bundle}"
 
+    local members
+    members="$(tar -tzf "${bundle}" 2>/dev/null)" || _error "Invalid config bundle"
     while IFS= read -r member; do
+        [[ -n "${member}" ]] || continue
         case "${member}" in
         manifest.json|script-config.json|xray-config.json) ;;
         *) _error "Unsupported file in config bundle: ${member}" ;;
         esac
-    done < <(tar -tzf "${bundle}" 2>/dev/null) || _error "Invalid config bundle"
+    done <<<"${members}"
 
     work="$(mktemp -d)" || _error "Failed to create import workspace"
     tar -xzf "${bundle}" -C "${work}" --no-same-owner ||
@@ -262,6 +267,7 @@ function handler_import_config() {
         { rm -rf "${work}"; _error "Unsupported config bundle format"; }
     candidate_script="$(jq '.' "${work}/script-config.json")" ||
         { rm -rf "${work}"; _error "Invalid script config in bundle"; }
+    candidate_script="$(echo "${candidate_script}" | jq --arg version "$(echo "${SCRIPT_CONFIG}" | jq -r '.version')" '.version = $version')"
     XRAY_CONFIG="$(jq '.' "${work}/xray-config.json")" ||
         { rm -rf "${work}"; _error "Invalid Xray config in bundle"; }
 
