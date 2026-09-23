@@ -746,6 +746,11 @@ function apply_xray_config() {
     fi
 }
 
+function sync_script_routing_state() {
+    SCRIPT_CONFIG="$(echo "${SCRIPT_CONFIG}" | jq --argjson rules "$(echo "${XRAY_CONFIG}" | jq '.routing.rules // []')" '.rules = $rules')"
+    persist_script_config
+}
+
 # =============================================================================
 # 函数名称: add_rule
 # 功能描述: 在 Xray 配置的 routing.rules 中添加或更新路由规则。
@@ -845,8 +850,14 @@ function add_rule() {
     fi
     case "${apply_mode}" in
     defer) ;;
-    restart) apply_xray_config "routing:add:${rule_tag}" "restart" ;;
-    *) apply_xray_config "routing:add:${rule_tag}" ;;
+    restart)
+        apply_xray_config "routing:add:${rule_tag}" "restart"
+        sync_script_routing_state
+        ;;
+    *)
+        apply_xray_config "routing:add:${rule_tag}"
+        sync_script_routing_state
+        ;;
     esac
 }
 
@@ -970,6 +981,7 @@ function handler_routing_rule_delete() {
     ')"
 
     apply_xray_config "routing:delete:${rule_tag}" "restart"
+    sync_script_routing_state
     echo -e "${GREEN}[$(echo "$I18N_DATA" | jq -r '.title.info')]${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.routing.deleted")"
 }
 
@@ -1001,6 +1013,7 @@ function handler_routing_rule_clear() {
             .routing.rules |= map(select(.ruleTag != $ruleTag))
         ')"
         apply_xray_config "routing:clear:${rule_tag}" "restart"
+        sync_script_routing_state
         echo -e "${GREEN}[$(echo "$I18N_DATA" | jq -r '.title.info')]${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.routing.cleared")"
         ;;
     *)
@@ -1408,7 +1421,7 @@ function handler_xray_config() {
     SCRIPT_CONFIG="$(echo "${SCRIPT_CONFIG}" | jq --argjson rules "${XRAY_RULES}" '.rules = $rules')"
     # 统一执行 Xray 配置校验、自动备份和安全写入；成功后再保存脚本配置。
     apply_xray_config "xray:regenerate"
-    echo "${SCRIPT_CONFIG}" >"${SCRIPT_CONFIG_PATH}" && sleep 2
+    persist_script_config
 }
 
 # =============================================================================
