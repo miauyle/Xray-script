@@ -625,7 +625,9 @@ function backup_xray_config() {
     local -a backups=()
     local i
     mapfile -t backups < <(
-        find "${XRAY_BACKUP_DIR}" -maxdepth 1 -type f -name 'config-*.json' -printf '%f\n' 2>/dev/null | sort -r
+        find "${XRAY_BACKUP_DIR}" -maxdepth 1 -type f -name 'config-*.json' -printf '%T@ %f\n' 2>/dev/null |
+            sort -nr |
+            cut -d' ' -f2-
     )
 
     for ((i = XRAY_BACKUP_KEEP; i < ${#backups[@]}; i++)); do
@@ -1275,10 +1277,9 @@ function handler_xray_config() {
     XRAY_RULES="$(echo "${XRAY_CONFIG}" | jq '.routing.rules')"
     # 更新脚本配置中的路由规则
     SCRIPT_CONFIG="$(echo "${SCRIPT_CONFIG}" | jq --argjson rules "${XRAY_RULES}" '.rules = $rules')"
-    # 将更新后的脚本配置和 Xray 配置写入文件
+    # 统一执行 Xray 配置校验、自动备份和安全写入；成功后再保存脚本配置。
+    persist_xray_config
     echo "${SCRIPT_CONFIG}" >"${SCRIPT_CONFIG_PATH}" && sleep 2
-    backup_xray_config
-    echo "${XRAY_CONFIG}" >"${XRAY_CONFIG_PATH}" && sleep 2
 }
 
 # =============================================================================
@@ -1891,10 +1892,9 @@ function handler_warp() {
     fi
     # 更新脚本配置中的 WARP 状态
     SCRIPT_CONFIG=$(echo "${SCRIPT_CONFIG}" | jq --arg warp "${WARP_STATUS}" '.xray.warp = $warp')
-    # 将更新后的脚本配置和 Xray 配置写入文件
+    # 统一执行 Xray 配置校验、自动备份和安全写入；成功后再保存脚本配置。
+    persist_xray_config
     echo "${SCRIPT_CONFIG}" >"${SCRIPT_CONFIG_PATH}" && sleep 2
-    backup_xray_config
-    echo "${XRAY_CONFIG}" >"${XRAY_CONFIG_PATH}" && sleep 2
 }
 
 # =============================================================================
