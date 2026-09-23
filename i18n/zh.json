@@ -580,6 +580,7 @@
     "remote_backend": "订阅后端",
     "state_failed": "保存订阅状态失败",
     "cancelled": "操作已取消",
-    "old_backend_cleanup_failed": "新订阅后端已启用，但旧订阅后端清理失败，请手动检查"
+    "old_backend_cleanup_failed": "新订阅后端已启用，但旧订阅后端清理失败，请手动检查",
+    "http_firewall_hint": "如果外部无法访问订阅，请确认 VPS/云安全组已放行该 TCP 端口"
   }
 }
