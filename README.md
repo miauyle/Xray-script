@@ -54,6 +54,12 @@
 
 ## 更新日志
 
+8. v2026.09.23.4 修正 Clash/Mihomo 远程订阅与 Xray SNI 模式错误耦合的问题。
+   1. Vision、XHTTP、Fallback、SNI 等兼容协议都可生成远程订阅，不再要求 `.xray.tag == SNI`。
+   2. 远程订阅托管与 Xray 数据链路解耦：已有 Nginx HTTPS 时优先复用；否则可选择启动轻量 HTTP 静态订阅服务。
+   3. 轻量 HTTP 后端仅响应随机 Token 对应的 `clash.yaml`，无目录浏览和 Web 管理界面，并由 systemd 管理。
+   4. HTTP 后端启动后会本机自检订阅 URL；端口冲突或服务启动失败时不会写入有效订阅状态。
+   5. HTTP 订阅链路不加密，订阅包含节点凭据，脚本会在启用前明确提示风险。
 7. v2026.09.23.3 新增 Clash Verge Rev / Mihomo 配置与订阅功能。
    1. 支持从当前 Xray 配置生成可直接导入的 Mihomo YAML。
    2. 支持 Vision+Reality、VLESS+XHTTP+Reality、Fallback，以及 SNI 下的 Reality/XHTTP/TLS-CDN 节点。
@@ -100,12 +106,12 @@ SNI 配置中，CDN 的分享链接 Alpn 默认为 H2，如有 H3 需求，请�
 主菜单新增 `Clash/Mihomo 配置与订阅`：
 
 - `生成/刷新本地 YAML`：输出到 `~/.xray-script/clash/clash.yaml`。
-- `开启/刷新 HTTPS 远程订阅`：仅 SNI + Nginx 模式可用，使用现有 Nginx 静态提供订阅文件，不新增常驻服务。
+- `开启/刷新远程订阅`：与 Xray 协议类型无关；已有 Nginx HTTPS 站点时优先复用，否则可选择启动轻量 HTTP 静态订阅服务。
 - `查看订阅信息`：显示本地 YAML 路径和当前订阅 URL。
 - `更换订阅 URL Token`：立即使旧 URL 失效。
-- `关闭 HTTPS 远程订阅`：移除远程入口，但保留本地 YAML。
+- `关闭远程订阅`：关闭当前订阅后端，但保留本地 YAML。
 
-远程订阅 URL 形如 `https://domain/sub/<random-token>/clash.yaml`。订阅内容包含节点凭据，因此 URL 应视为密钥；如果怀疑泄露，请立即旋转 Token。
+远程订阅与 Xray 的 Vision/Reality/XHTTP 数据链路完全独立。已有 Nginx HTTPS 时 URL 形如 `https://domain/sub/<random-token>/clash.yaml`；没有可复用 HTTPS 站点时，可选择轻量 HTTP 后端，URL 形如 `http://server-ip:18080/sub/<random-token>/clash.yaml`。HTTP 不加密，订阅内容又包含节点凭据，因此只应在你接受这一风险时使用；如果怀疑 URL 泄露，请立即旋转 Token。
 
 当前生成器支持 Vision+Reality、VLESS+XHTTP+Reality、Fallback 与 SNI 中的兼容 VLESS 节点。Mihomo 当前不支持 VLESS+mKCP 和 Trojan+XHTTP，脚本不会为这两类组合生成伪兼容配置。
 
