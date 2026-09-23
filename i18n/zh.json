@@ -39,7 +39,8 @@
       "option8": "信息统计",
       "option9": "管理配置",
       "option0": "退出",
-      "option10": "Clash/Mihomo 配置与订阅"
+      "option10": "Clash/Mihomo 配置与订阅",
+      "option11": "运维与诊断"
     },
     "full_installation": {
       "title": "安装流程",
@@ -120,7 +121,11 @@
       "info7": "(需要开启 WARP)添加关于 ip 的 WARP 分流, 相关分流添加在 ruleTag 为 warp-ip 中",
       "info8": "(需要开启 WARP)添加关于 domain 的 WARP 分流, 相关分流添加在 ruleTag 为 warp-domain 中",
       "option7": "管理现有分流规则",
-      "info9": "查看、删除单项或清空 block/WARP 的 ip/domain 自定义规则"
+      "info9": "查看、删除单项或清空 block/WARP 的 ip/domain 自定义规则",
+      "option8": "Direct IP 分流",
+      "option9": "Direct 域名分流",
+      "info10": "添加指定 IP 到 Direct 出站",
+      "info11": "添加指定域名到 Direct 出站"
     },
     "sni_config": {
       "title": "SNI 配置",
@@ -173,6 +178,20 @@
       "info3": "显示本地 YAML 路径和当前远程订阅 URL",
       "info4": "生成新的随机 Token，旧订阅 URL 立即失效",
       "info5": "关闭当前远程订阅后端，保留本地 YAML"
+    },
+    "operations": {
+      "title": "运维与诊断",
+      "option1": "Doctor 一键诊断",
+      "option2": "查看日志",
+      "option3": "WARP 状态与出口",
+      "option4": "切换 WARP 失败时 Direct 回退",
+      "option5": "恢复 Xray 自动备份",
+      "option6": "导出配置包",
+      "option7": "导入配置包",
+      "option8": "Direct IPv4/IPv6 出口策略"
+    },
+    "direct_family": {
+      "title": "Direct 出口 IP family"
     }
   },
   "handler": {
@@ -244,7 +263,9 @@
     "warp_ip": "请输入分流到 WARP 的 ip",
     "warp_domain": "请输入分流到 WARP 的 domain",
     "block_ip": "请输入分流到 block 的 ip",
-    "block_domain": "请输入分流到 block 的 domain"
+    "block_domain": "请输入分流到 block 的 domain",
+    "direct_ip": "输入需要 Direct 的 IP",
+    "direct_domain": "输入需要 Direct 的域名"
   },
   "share": {
     "client": "客户端配置",

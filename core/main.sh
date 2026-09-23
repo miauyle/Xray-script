@@ -331,6 +331,8 @@ function select_routing_rule_tag() {
     2) echo 'block-domain' ;;
     3) echo 'warp-ip' ;;
     4) echo 'warp-domain' ;;
+    5) echo 'direct-ip' ;;
+    6) echo 'direct-domain' ;;
     *) return 1 ;;
     esac
 }
@@ -375,9 +377,10 @@ function processes_routing() {
         processes_routing_rules
         return 0
         ;;
+    8) exec_handler '--routing' 'direct' 'ip' ;;
+    9) exec_handler '--routing' 'direct' 'domain' ;;
     *) exit 0 ;;                                    # 其他情况：退出脚本
     esac
-    exec_handler '--restart' # 重启 Xray 服务
 }
 
 function processes_custom_sites() {
@@ -478,6 +481,33 @@ function processes_config() {
     esac
 }
 
+function processes_direct_family() {
+    exec_menu '--direct-family'
+    local choose=$(echo $?)
+    case ${choose} in
+    1) exec_handler '--direct-family' 'auto' ;;
+    2) exec_handler '--direct-family' 'ipv4' ;;
+    3) exec_handler '--direct-family' 'ipv6' ;;
+    *) return 0 ;;
+    esac
+}
+
+function processes_operations() {
+    exec_menu '--operations'
+    local choose=$(echo $?)
+    case ${choose} in
+    1) exec_handler '--doctor' ;;
+    2) exec_handler '--logs' ;;
+    3) exec_handler '--warp-status' ;;
+    4) exec_handler '--warp-fallback' ;;
+    5) exec_handler '--backup-restore' ;;
+    6) exec_handler '--export-config' ;;
+    7) exec_handler '--import-config' ;;
+    8) processes_direct_family ;;
+    *) return 0 ;;
+    esac
+}
+
 function processes_clash_subscription() {
     exec_menu '--clash'
     local choose=$(echo $?)
@@ -521,6 +551,7 @@ function processes_index() {
     8) exec_handler '--traffic' ;;    # 选择 8：显示流量统计
     9) processes_config ;;            # 选择 9：进入配置管理流程
     10) processes_clash_subscription ;; # 选择 10：Clash/Mihomo 配置与订阅
+    11) processes_operations ;;          # 选择 11：运维与诊断
     *) exit 0 ;;                      # 其他情况：退出脚本
     esac
 }

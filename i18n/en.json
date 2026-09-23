@@ -39,7 +39,8 @@
       "option8": "Traffic Statistics",
       "option9": "Manage Configuration",
       "option0": "Exit",
-      "option10": "Clash/Mihomo Config & Subscription"
+      "option10": "Clash/Mihomo Config & Subscription",
+      "option11": "Operations & Diagnostics"
     },
     "full_installation": {
       "title": "Installation Flow",
@@ -120,7 +121,11 @@
       "info7": "(WARP must be enabled) Add WARP IP route to ruleTag warp-ip.",
       "info8": "(WARP must be enabled) Add WARP domain route to ruleTag warp-domain.",
       "option7": "Manage existing routing rules",
-      "info9": "List, delete, or clear custom block/WARP IP/domain rules."
+      "info9": "List, delete, or clear custom block/WARP IP/domain rules.",
+      "option8": "Direct IP routing",
+      "option9": "Direct domain routing",
+      "info10": "Add IP destinations to Direct outbound",
+      "info11": "Add domains to Direct outbound"
     },
     "sni_config": {
       "title": "SNI Configuration",
@@ -173,6 +178,20 @@
       "info3": "Show the local YAML path and current remote subscription URL",
       "info4": "Generate a new random token so the old subscription URL stops working",
       "info5": "Disable the active remote backend while keeping the local YAML"
+    },
+    "operations": {
+      "title": "Operations & Diagnostics",
+      "option1": "Run Doctor",
+      "option2": "View logs",
+      "option3": "WARP status & egress",
+      "option4": "Toggle WARP direct fallback",
+      "option5": "Restore Xray backup",
+      "option6": "Export config bundle",
+      "option7": "Import config bundle",
+      "option8": "Direct IPv4/IPv6 policy"
+    },
+    "direct_family": {
+      "title": "Direct egress IP family"
     }
   },
   "handler": {
@@ -244,7 +263,9 @@
     "warp_ip": "Enter IP to route to WARP",
     "warp_domain": "Enter domain to route to WARP",
     "block_ip": "Enter IP to route to block",
-    "block_domain": "Enter domain to route to block"
+    "block_domain": "Enter domain to route to block",
+    "direct_ip": "Enter IP to route Direct",
+    "direct_domain": "Enter domain to route Direct"
   },
   "share": {
     "client": "Client Configuration",

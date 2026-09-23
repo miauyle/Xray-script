@@ -55,6 +55,14 @@
 
 ## Changelog
 
+13. v2026.09.23.9 completes the operations and safety-management features.
+   1. Finish `apply_xray_config` migration with validation, automatic backup, atomic replace, and restart-failure rollback.
+   2. Add backup restore, config export/import, Doctor, and Xray/WARP/Clash log views.
+   3. Add WARP container/SOCKS/egress IP/country checks and optional Direct fallback using Xray observatory + balancer.
+   4. Unify Direct/WARP/Block routing management and persist custom routing state.
+   5. Add Auto/IPv4/IPv6 Direct egress policy and preserve it across protocol regeneration.
+   6. Add a central Operations & Diagnostics menu; automatic backups now pair script state so protocol reconfiguration can roll back consistently.
+   7. Add lightweight CI syntax validation for core Shell, JSON, and the Clash HTTP Python service.
 12. v2026.09.23.8 introduces the unified `apply_xray_config` safe-write entry point and migrates routing changes first.
    1. Stage the candidate config in the same directory as the live file and validate it with `xray run -test -format=json`.
    2. After validation, back up the current config and preserve the live file's permissions and owner/group.
@@ -160,6 +168,32 @@ Before replacing the live Xray configuration, the script automatically saves the
 - This version adds the backup mechanism only; there is no restore menu yet
 
 A backup creation or permission failure aborts the config change. Failure to prune an older backup only emits a warning.
+
+
+## Operations & Diagnostics
+
+Main-menu item **11. Operations & Diagnostics** provides the maintenance tools in one place:
+
+- **Doctor** checks Xray JSON/core validation, systemd status, listening port, backups, WARP container/SOCKS egress, WARP fallback wiring, and the Clash HTTP subscription service.
+- **Logs** shows recent Xray systemd/error.log, WARP Docker logs, and Clash subscription service logs.
+- **WARP status & egress** queries Cloudflare trace through the WARP SOCKS path and reports container status, egress IP, location, and WARP state.
+- **WARP Direct fallback** uses Xray `observatory + balancer.fallbackTag=direct`; only rules explicitly routed to WARP participate.
+- **Backup restore** keeps 10 automatic Xray backups by default. New backups also pair the script state; legacy Xray-only backups remain restorable.
+- **Export/import** bundles script + Xray config into a mode-`600` `tar.gz`. WARP container networking is host-local, so after moving to another VPS run Doctor/WARP reset to reconfirm it.
+- **Direct egress family** selects Auto / IPv4 / IPv6 through Xray Freedom `sockopt.domainStrategy`.
+
+### Safe apply and automatic rollback
+
+All Xray config writes converge on `apply_xray_config`:
+
+```text
+candidate → xray -test → automatic backup → atomic replace → restart check
+                                                        ↓ failure
+                                      restore old Xray + script state
+```
+
+Routing, protocol regeneration, WARP operations, backup restore/import, and Direct/WARP fallback reuse this path. Protocol regeneration keeps a pending script-state snapshot across handler processes and clears it only after the new Xray config is successfully applied.
+
 
 ## How to Use
 

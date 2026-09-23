@@ -1,0 +1,37 @@
+name: Validate scripts
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Bash syntax
+        run: |
+          bash -n core/handler.sh
+          bash -n core/main.sh
+          bash -n core/menu.sh
+          bash -n core/read.sh
+          bash -n core/operations.sh
+          bash -n core/clash.sh
+          bash -n service/docker.sh
+
+      - name: JSON syntax
+        run: |
+          jq empty config.json
+          jq empty i18n/zh.json
+          jq empty i18n/en.json
+          for file in config/xray/*.json; do jq empty "$file"; done
+
+      - name: Python syntax
+        run: python3 -m py_compile core/clash_http_server.py
