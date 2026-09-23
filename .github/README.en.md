@@ -55,6 +55,13 @@
 
 ## Changelog
 
+13. v2026.09.23.9 completes the Xray config lifecycle with health checks, automatic rollback, restore UI, and config export/import.
+   1. `apply_xray_config` can restart and verify Xray; restart failure prints systemd/journal diagnostics and restores the pre-apply backup automatically.
+   2. Routing add/delete/clear, full config regeneration, and WARP toggle/reset all use the unified safe apply path.
+   3. Default routing rules are now built in memory during full config generation and applied once, avoiding intermediate live-config writes.
+   4. Configuration Management adds backup listing and manual restore; restore creates another backup of the current config and health-checks Xray afterward.
+   5. Add tar.gz config export/import containing Xray config, script config, and a manifest; imports validate JSON and Xray config before applying.
+   6. WARP reset refreshes the rebuilt container IP in the Xray `warp` outbound so Xray does not keep a stale Docker address.
 12. v2026.09.23.8 introduces the unified `apply_xray_config` safe-write entry point and migrates routing changes first.
    1. Stage the candidate config in the same directory as the live file and validate it with `xray run -test -format=json`.
    2. After validation, back up the current config and preserve the live file's permissions and owner/group.
@@ -160,6 +167,17 @@ Before replacing the live Xray configuration, the script automatically saves the
 - This version adds the backup mechanism only; there is no restore menu yet
 
 A backup creation or permission failure aborts the config change. Failure to prune an older backup only emits a warning.
+
+### Recovery and config migration
+
+Under `Configuration Management -> Config Backup & Recovery` you can:
+
+- List recent automatic Xray backups.
+- Restore a selected backup; the current config is backed up again first, then Xray is restarted and verified.
+- Export a bundle under `~/.xray-script/exports/` containing `xray-config.json`, `script-config.json`, and a manifest.
+- Import a bundle created by the script; JSON and Xray configuration are validated before any apply.
+
+When an apply that requires restart makes Xray fail to start, the script automatically attempts to restore the pre-apply backup and starts Xray again.
 
 ## How to Use
 
