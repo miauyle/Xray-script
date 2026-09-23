@@ -101,7 +101,9 @@
       "info2": "Manage blocking or WARP routing",
       "info3": "Includes Nginx update, domain change, web config",
       "info4": "(Non-SNI) Change Xray listen port and restart service",
-      "info5": "geodata provided by  https://github.com/Loyalsoldier/v2ray-rules-dat "
+      "info5": "geodata provided by  https://github.com/Loyalsoldier/v2ray-rules-dat ",
+      "option7": "Config Backup & Recovery",
+      "info7": "List/restore Xray backups or export/import a config bundle"
     },
     "route_management": {
       "title": "Custom Routing",
@@ -173,6 +175,17 @@
       "info3": "Show the local YAML path and current remote subscription URL",
       "info4": "Generate a new random token so the old subscription URL stops working",
       "info5": "Disable the active remote backend while keeping the local YAML"
+    },
+    "recovery": {
+      "title": "Config Backup & Recovery",
+      "option1": "List automatic Xray backups",
+      "option2": "Restore an Xray backup",
+      "option3": "Export config bundle",
+      "option4": "Import config bundle",
+      "info1": "List automatic backups from newest to oldest",
+      "info2": "Back up the current config again before restore and auto-rollback if restart fails",
+      "info3": "Export Xray and script configs into a tar.gz bundle",
+      "info4": "Validate an imported bundle before applying it and health-check Xray after restart"
     }
   },
   "handler": {
@@ -215,6 +228,18 @@
       "clear_prompt": "Confirm clearing rule group",
       "cleared": "Rule group cleared and Xray configuration reloaded",
       "cancelled": "Operation cancelled"
+    },
+    "recovery": {
+      "no_backups": "No automatic Xray backups are available",
+      "restore_prompt": "Select the backup number to restore",
+      "invalid_choice": "Invalid backup selection",
+      "invalid_backup": "The backup contains an invalid Xray config",
+      "restore_success": "Xray backup restored successfully",
+      "export_success": "Config bundle exported",
+      "import_prompt": "Enter the tar.gz config bundle path to import",
+      "import_missing": "Config bundle does not exist",
+      "import_invalid": "Config bundle format is invalid or incomplete",
+      "import_success": "Config bundle imported successfully"
     }
   },
   "read": {
