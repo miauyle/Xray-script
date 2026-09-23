@@ -31,7 +31,7 @@ readonly CLASH_TOKEN_PATH="${CLASH_DIR}/subscription.token"
 readonly CLASH_STATE_PATH="${CLASH_DIR}/subscription.json"
 readonly CLASH_HTTP_SERVER_PATH="${CUR_DIR}/clash_http_server.py"
 readonly CLASH_HTTP_SERVICE="/etc/systemd/system/xray-clash-subscription.service"
-readonly CLASH_HTTP_PORT="${CLASH_HTTP_PORT:-18080}"
+readonly DEFAULT_CLASH_HTTP_PORT=80
 readonly NGINX_CONFIG_DIR="/usr/local/nginx/conf"
 readonly NGINX_SUB_CONFIG="${NGINX_CONFIG_DIR}/nginxconfig.io/clash-subscription.conf"
 
@@ -363,7 +363,11 @@ function subscription_url() {
         ;;
     http)
         [[ -n "${port}" ]] || return 1
-        printf 'http://%s:%s/sub/%s/clash.yaml' "${host}" "${port}" "${token}"
+        if [[ "${port}" -eq 80 ]]; then
+            printf 'http://%s/sub/%s/clash.yaml' "${host}" "${token}"
+        else
+            printf 'http://%s:%s/sub/%s/clash.yaml' "${host}" "${port}" "${token}"
+        fi
         ;;
     *)
         return 1
@@ -483,7 +487,20 @@ function http_service_active() {
     systemctl -q is-active xray-clash-subscription 2>/dev/null
 }
 
+function prompt_http_port() {
+    local port
+    printf "%s [%s]: " "$(msg http_port_prompt)" "${DEFAULT_CLASH_HTTP_PORT}" >&2
+    read -r port
+    port="${port:-${DEFAULT_CLASH_HTTP_PORT}}"
+
+    if [[ ! "${port}" =~ ^[0-9]+$ ]] || ((port < 1 || port > 65535)); then
+        fail "$(msg http_port_invalid)"
+    fi
+    printf '%s' "${port}"
+}
+
 function write_http_service() {
+    local port="$1"
     local python_bin
     python_bin="$(command -v python3)" || return 1
     [[ -f "${CLASH_HTTP_SERVER_PATH}" ]] || return 1
@@ -496,7 +513,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=${python_bin} ${CLASH_HTTP_SERVER_PATH} --bind 0.0.0.0 --port ${CLASH_HTTP_PORT} --token-file ${CLASH_TOKEN_PATH} --yaml-file ${CLASH_CONFIG_PATH}
+ExecStart=${python_bin} ${CLASH_HTTP_SERVER_PATH} --bind 0.0.0.0 --port ${port} --token-file ${CLASH_TOKEN_PATH} --yaml-file ${CLASH_CONFIG_PATH}
 Restart=on-failure
 RestartSec=2
 NoNewPrivileges=true
@@ -508,10 +525,17 @@ EOF_SERVICE
 }
 
 function http_port_available() {
-    local python_bin
-    http_service_active && return 0
+    local port="$1"
+    local python_bin current_backend current_port
+    current_backend="$(state_value backend 2>/dev/null || true)"
+    current_port="$(state_value port 2>/dev/null || true)"
+
+    if http_service_active && [[ "${current_backend}" == 'http' && "${current_port}" == "${port}" ]]; then
+        return 0
+    fi
+
     python_bin="$(command -v python3)" || return 1
-    "${python_bin}" - "${CLASH_HTTP_PORT}" <<'PY' >/dev/null 2>&1
+    "${python_bin}" - "${port}" <<'PY' >/dev/null 2>&1
 import socket
 import sys
 port = int(sys.argv[1])
@@ -523,43 +547,64 @@ finally:
 PY
 }
 
+function restore_http_service() {
+    local backup="$1"
+    local had_service="$2"
+    if [[ "${had_service}" -eq 1 ]]; then
+        cp -af "${backup}" "${CLASH_HTTP_SERVICE}"
+        systemctl daemon-reload >/dev/null 2>&1 || true
+        systemctl restart xray-clash-subscription >/dev/null 2>&1 || true
+    else
+        systemctl disable --now xray-clash-subscription >/dev/null 2>&1 || true
+        rm -f "${CLASH_HTTP_SERVICE}"
+        systemctl daemon-reload >/dev/null 2>&1 || true
+    fi
+}
+
 function publish_http_subscription() {
     local token="$1"
-    local old_token='' had_token=0 was_active=0
+    local port="$2"
+    local old_token='' had_token=0 had_service=0 backup_service=''
 
     command -v python3 >/dev/null 2>&1 || return 1
-    http_service_active && was_active=1
-    http_port_available || return 2
+    http_port_available "${port}" || return 2
+
     [[ -s "${CLASH_TOKEN_PATH}" ]] && {
         old_token="$(current_token)"
         had_token=1
     }
 
+    if [[ -f "${CLASH_HTTP_SERVICE}" ]]; then
+        backup_service="$(mktemp "${CLASH_DIR}/http-service.bak.XXXXXX")" || return 1
+        cp -af "${CLASH_HTTP_SERVICE}" "${backup_service}"
+        had_service=1
+    fi
+
     save_token "${token}"
-    write_http_service || {
+    write_http_service "${port}" || {
         if [[ "${had_token}" -eq 1 ]]; then save_token "${old_token}"; else rm -f "${CLASH_TOKEN_PATH}"; fi
+        [[ -n "${backup_service}" ]] && rm -f "${backup_service}"
         return 1
     }
 
     systemctl daemon-reload || {
         if [[ "${had_token}" -eq 1 ]]; then save_token "${old_token}"; else rm -f "${CLASH_TOKEN_PATH}"; fi
+        restore_http_service "${backup_service}" "${had_service}"
+        rm -f "${backup_service}"
         return 1
     }
     systemctl enable xray-clash-subscription >/dev/null 2>&1 || true
-    if ! systemctl restart xray-clash-subscription; then
+
+    if ! systemctl restart xray-clash-subscription ||
+       ! systemctl -q is-active xray-clash-subscription ||
+       ! curl -fsS --max-time 5 "http://127.0.0.1:${port}/sub/${token}/clash.yaml" >/dev/null 2>&1; then
         if [[ "${had_token}" -eq 1 ]]; then save_token "${old_token}"; else rm -f "${CLASH_TOKEN_PATH}"; fi
-        [[ "${was_active}" -eq 0 ]] && systemctl disable --now xray-clash-subscription >/dev/null 2>&1 || true
+        restore_http_service "${backup_service}" "${had_service}"
+        rm -f "${backup_service}"
         return 3
     fi
-    if ! systemctl -q is-active xray-clash-subscription; then
-        if [[ "${had_token}" -eq 1 ]]; then save_token "${old_token}"; else rm -f "${CLASH_TOKEN_PATH}"; fi
-        return 3
-    fi
-    if ! curl -fsS --max-time 5 "http://127.0.0.1:${CLASH_HTTP_PORT}/sub/${token}/clash.yaml" >/dev/null 2>&1; then
-        if [[ "${had_token}" -eq 1 ]]; then save_token "${old_token}"; else rm -f "${CLASH_TOKEN_PATH}"; fi
-        [[ "${was_active}" -eq 0 ]] && systemctl disable --now xray-clash-subscription >/dev/null 2>&1 || systemctl restart xray-clash-subscription >/dev/null 2>&1 || true
-        return 3
-    fi
+
+    rm -f "${backup_service}"
     return 0
 }
 
@@ -633,19 +678,21 @@ function enable_remote() {
         *) fail "$(msg nginx_update_failed)" ;;
         esac
     else
+        local http_port
         command -v python3 >/dev/null 2>&1 || fail "$(msg remote_backend_missing)"
         confirm_http_fallback || fail "$(msg cancelled)"
-        publish_http_subscription "${token}"
+        http_port="$(prompt_http_port)"
+        publish_http_subscription "${token}" "${http_port}"
         rc=$?
         case "${rc}" in
         0)
             host="$(get_public_ip)"
-            save_state 'http' "${host}" "${CLASH_HTTP_PORT}"
+            save_state 'http' "${host}" "${http_port}"
             if [[ "${previous_backend}" == 'nginx' ]]; then
                 disable_nginx_subscription || warn "$(msg old_backend_cleanup_failed)"
             fi
             ;;
-        2) fail "$(msg http_port_busy): ${CLASH_HTTP_PORT}" ;;
+        2) fail "$(msg http_port_busy): ${http_port}" ;;
         *) fail "$(msg http_service_failed)" ;;
         esac
     fi
