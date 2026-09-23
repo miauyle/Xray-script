@@ -55,6 +55,11 @@
 
 ## Changelog
 
+14. v2026.09.23.10 carries forward the remaining useful Xray restart reliability improvements from superseded PR #11.
+   1. After restart/start, check the active state up to five times with short delays to avoid transient systemd readiness false negatives.
+   2. When a post-apply restart fails, print `systemctl status xray` and the latest 40 journal lines before automatic rollback.
+   3. Manual Xray restart now uses the same checked restart path; failures are no longer silently ignored and include the same diagnostics.
+   4. Ensure the Xray systemd unit is enabled after a successful start/restart.
 13. v2026.09.23.9 completes the operations and safety-management features.
    1. Finish `apply_xray_config` migration with validation, automatic backup, atomic replace, and restart-failure rollback.
    2. Add backup restore, config export/import, Doctor, and Xray/WARP/Clash log views.

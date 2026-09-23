@@ -54,6 +54,11 @@
 
 ## 更新日志
 
+14. v2026.09.23.10 吸收旧 PR #11 中仍有价值的 Xray 重启可靠性改进。
+   1. Xray restart/start 后最多进行 5 次短间隔 active 检查，降低 systemd 服务启动瞬间造成的误判。
+   2. apply 后重启失败时，在自动 rollback 前打印 `systemctl status xray` 和最近 40 行 journal，便于直接看到真实失败原因。
+   3. 手工重启 Xray 同样复用 checked restart；失败不再静默继续，并输出相同诊断信息。
+   4. restart/start 成功后确保 Xray systemd unit 已启用。
 13. v2026.09.23.9 补全运维与安全管理功能。
    1. `apply_xray_config` 完成迁移：校验、自动备份、原子替换，并支持重启失败自动回滚。
    2. 新增备份列表/恢复、配置导出/导入、Doctor 与 Xray/WARP/Clash 日志查看。
