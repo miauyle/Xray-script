@@ -55,6 +55,12 @@
 
 ## Changelog
 
+12. v2026.09.23.8 introduces the unified `apply_xray_config` safe-write entry point and migrates routing changes first.
+   1. Stage the candidate config in the same directory as the live file and validate it with `xray run -test -format=json`.
+   2. After validation, back up the current config and preserve the live file's permissions and owner/group.
+   3. Replace the live config with a same-filesystem atomic `mv`, avoiding partial writes from `cat > config.json` style updates.
+   4. Routing add, single-entry delete, and group clear now call `apply_xray_config` directly with operation context.
+   5. Keep `persist_xray_config` temporarily as a compatibility wrapper; full config regeneration and WARP call sites can migrate incrementally later.
 11. v2026.09.23.7 adds automatic Xray config backups and shorter Clash/Mihomo subscription tokens.
    1. Before overwriting `/usr/local/etc/xray/config.json`, save the current config under `~/.xray-script/backups/xray/`.
    2. Backups use timestamp + random-suffix names, mode `600`, with the backup directory set to `700`.
