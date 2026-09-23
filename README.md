@@ -54,6 +54,13 @@
 
 ## 更新日志
 
+10. v2026.09.23.6 升级 Clash Verge Rev / Mihomo 配置生成器到 v2。
+   1. 默认开启 Sniffer，覆盖 HTTP、TLS 与 QUIC，并保留常见跳过域名。
+   2. 新增 `Proxy` 手动策略组与 `Auto` 延迟测试组；Auto 每 300 秒测试节点，支持 lazy、50ms tolerance 与 HTTP 204 校验。
+   3. 默认启用 `profile.store-selected`、`unified-delay` 与 `tcp-concurrent`，并将 IPv6 默认关闭。
+   4. 启用 Mihomo GEO 数据自动更新，使用 `memconservative` loader 与 MetaCubeX GeoIP/GeoSite 数据。
+   5. 默认规则增加广告拒绝、LAN 直连、Steam/Microsoft 中国区直连、CN 域名/IP 直连，其余流量进入 `Proxy`。
+   6. 不在订阅中强制写入 TUN/DNS，避免覆盖 Clash Verge 客户端本地网络设置。
 9. v2026.09.23.5 增强 Clash/Mihomo 轻量 HTTP 订阅启动诊断与自检可靠性。
    1. 本机订阅自检强制绕过 `http_proxy/HTTP_PROXY`，避免 `127.0.0.1` 健康检查误走代理。
    2. 启动后进行多次短间隔自检，减少 systemd 服务刚启动时的瞬时误判。
@@ -107,6 +114,15 @@
 SNI 配置中，CDN 的分享链接 Alpn 默认为 H2，如有 H3 需求，请自行在客户端修改。
 
 ### Clash Verge Rev / Mihomo
+
+**配置生成器 v2 默认策略：**
+
+- Sniffer：HTTP / TLS / QUIC。
+- 策略组：`Proxy`（手动）+ `Auto`（URL Test）。
+- GEO：自动更新 GeoIP / GeoSite 数据。
+- 分流：广告拒绝、LAN 直连、Steam/Microsoft 中国区直连、CN 域名/IP 直连，其余走 `Proxy`。
+- IPv6 默认关闭；开启 `unified-delay`、`tcp-concurrent`、`profile.store-selected`。
+- 不写入 TUN / DNS；继续由 Clash Verge 客户端本地配置管理。
 
 主菜单新增 `Clash/Mihomo 配置与订阅`：
 
