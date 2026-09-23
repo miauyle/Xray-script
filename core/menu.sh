@@ -134,6 +134,7 @@ function menu_index() {
     echo -e "${GREEN}8.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.index.option8")"
     echo -e "${GREEN}9.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.index.option9")"
     echo -e "${GREEN}10.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.index.option10")"
+    echo -e "${GREEN}11.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.index.option11")"
 
     # 打印退出选项
     echo -e "------------------------------------------------------"
@@ -333,6 +334,8 @@ function menu_route() {
     echo -e "${GREEN}6.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.route_management.option6")"
     # 打印选项 7
     echo -e "${GREEN}7.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.route_management.option7")"
+    echo -e "${GREEN}8.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.route_management.option8")"
+    echo -e "${GREEN}9.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.route_management.option9")"
 
     # 打印分隔线
     echo -e "------------------------------------------------------"
@@ -352,6 +355,8 @@ function menu_route() {
     echo -e "6. $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.route_management.info8")"
     # 打印选项 7 的说明信息
     echo -e "7. $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.route_management.info9")"
+    echo -e "8. $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.route_management.info10")"
+    echo -e "9. $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.route_management.info11")"
     # 打印分隔线
     echo -e "------------------------------------------------------"
 }
@@ -374,6 +379,8 @@ function menu_route_rule_types() {
     echo -e "${GREEN}2.${NC} block-domain"
     echo -e "${GREEN}3.${NC} warp-ip"
     echo -e "${GREEN}4.${NC} warp-domain"
+    echo -e "${GREEN}5.${NC} direct-ip"
+    echo -e "${GREEN}6.${NC} direct-domain"
     echo -e "------------------------------------------------------"
 }
 
@@ -443,6 +450,27 @@ function menu_clash_subscription() {
     echo -e "3. $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.clash_subscription.info3")"
     echo -e "4. $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.clash_subscription.info4")"
     echo -e "5. $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.clash_subscription.info5")"
+    echo -e "------------------------------------------------------"
+}
+
+function menu_operations() {
+    echo -e "------------------ $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.operations.title") ------------------"
+    echo -e "${GREEN}1.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.operations.option1")"
+    echo -e "${GREEN}2.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.operations.option2")"
+    echo -e "${GREEN}3.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.operations.option3")"
+    echo -e "${GREEN}4.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.operations.option4")"
+    echo -e "${GREEN}5.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.operations.option5")"
+    echo -e "${GREEN}6.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.operations.option6")"
+    echo -e "${GREEN}7.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.operations.option7")"
+    echo -e "${GREEN}8.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.operations.option8")"
+    echo -e "------------------------------------------------------"
+}
+
+function menu_direct_family() {
+    echo -e "------------------ $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.direct_family.title") ------------------"
+    echo -e "${GREEN}1.${NC} Auto"
+    echo -e "${GREEN}2.${NC} IPv4"
+    echo -e "${GREEN}3.${NC} IPv6"
     echo -e "------------------------------------------------------"
 }
 
@@ -571,6 +599,8 @@ function main() {
     --sni) menu_sni_config >&2 ;;         # 显示 SNI 配置菜单
     --custom-sites) menu_custom_sites >&2 ;;
     --clash) menu_clash_subscription >&2 ;;
+    --operations) menu_operations >&2 ;;
+    --direct-family) menu_direct_family >&2 ;;
     --banner) print_banner >&2 ;;         # 显示 Banner
     --status) print_status >&2 ;;         # 显示状态信息
     esac
