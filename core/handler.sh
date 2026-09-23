@@ -604,18 +604,23 @@ function backup_xray_config() {
     mkdir -p "${XRAY_BACKUP_DIR}" || _error "Failed to create Xray backup directory"
     chmod 700 "${XRAY_BACKUP_DIR}" || _error "Failed to secure Xray backup directory"
 
-    local timestamp backup_path
+    local timestamp temp_backup backup_path
     timestamp="$(date '+%Y%m%d-%H%M%S')"
-    backup_path="$(mktemp "${XRAY_BACKUP_DIR}/config-${timestamp}.XXXXXX.json")" || _error "Failed to create Xray config backup"
+    temp_backup="$(mktemp "${XRAY_BACKUP_DIR}/config-${timestamp}.XXXXXX")" || _error "Failed to create Xray config backup"
+    backup_path="${temp_backup}.json"
 
-    if ! cp -p "${XRAY_CONFIG_PATH}" "${backup_path}"; then
-        rm -f "${backup_path}"
+    if ! cp -p "${XRAY_CONFIG_PATH}" "${temp_backup}"; then
+        rm -f "${temp_backup}"
         _error "Failed to back up Xray configuration; original config was not modified"
     fi
-    chmod 600 "${backup_path}" || {
-        rm -f "${backup_path}"
+    chmod 600 "${temp_backup}" || {
+        rm -f "${temp_backup}"
         _error "Failed to secure Xray config backup; original config was not modified"
     }
+    if ! mv "${temp_backup}" "${backup_path}"; then
+        rm -f "${temp_backup}"
+        _error "Failed to finalize Xray config backup; original config was not modified"
+    fi
 
     local -a backups=()
     local i
