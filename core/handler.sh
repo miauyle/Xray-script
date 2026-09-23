@@ -359,7 +359,14 @@ function reset_json_fields() {
 }
 
 function persist_script_config() {
-    echo "${SCRIPT_CONFIG}" >"${SCRIPT_CONFIG_PATH}" && sleep 2
+    local temp_config
+    temp_config="$(mktemp "${SCRIPT_CONFIG_PATH}.tmp.XXXXXX")" || _error "Failed to stage script config"
+    printf '%s\n' "${SCRIPT_CONFIG}" >"${temp_config}" || { rm -f "${temp_config}"; _error "Failed to write staged script config"; }
+    jq -e . "${temp_config}" >/dev/null 2>&1 || { rm -f "${temp_config}"; _error "Script config is invalid JSON"; }
+    [[ -f "${SCRIPT_CONFIG_PATH}" ]] && chmod --reference="${SCRIPT_CONFIG_PATH}" "${temp_config}" 2>/dev/null || true
+    [[ -f "${SCRIPT_CONFIG_PATH}" ]] && chown --reference="${SCRIPT_CONFIG_PATH}" "${temp_config}" 2>/dev/null || true
+    mv -f "${temp_config}" "${SCRIPT_CONFIG_PATH}" || { rm -f "${temp_config}"; _error "Failed to atomically replace script config"; }
+    sleep 1
 }
 
 function get_custom_site_socket_name() {
@@ -1027,7 +1034,7 @@ function handler_reset_script_config() {
     case "${TARGET_CONFIG,,}" in
     xray)
         # 重置 xray 部分，保留 version, warp, rules 字段
-        SCRIPT_CONFIG=$(reset_json_fields "${SCRIPT_CONFIG}" 'xray' 'version' 'warp' 'rules')
+        SCRIPT_CONFIG=$(reset_json_fields "${SCRIPT_CONFIG}" 'xray' 'version' 'warp' 'warp_fallback' 'direct_family' 'rules')
         ;;
     nginx)
         # 重置 nginx 部分，保留 version, ca, ca_server 字段
@@ -2480,6 +2487,9 @@ function handler_quick_install() {
     handler_share
 }
 
+# 运维扩展依赖本文件中已经定义的 apply/backup/WARP helper。
+source "${OPERATIONS_PATH}"
+
 # =============================================================================
 # 函数名称: main
 # 功能描述: 脚本的主入口函数。
@@ -2539,6 +2549,15 @@ function main() {
     --warp) handler_warp ;;                     # 管理 WARP
     --reset-warp) handler_reset_warp ;;         # 重置 WARP
     --traffic) handler_traffic ;;               # 显示流量统计
+    --doctor) handler_doctor ;;
+    --logs) handler_logs ;;
+    --warp-status) handler_warp_status ;;
+    --warp-fallback) handler_warp_fallback ;;
+    --backup-list) handler_backup_list ;;
+    --backup-restore) handler_backup_restore ;;
+    --export-config) handler_export_config ;;
+    --import-config) handler_import_config "$@" ;;
+    --direct-family) handler_direct_family "$1" ;;
     --change-port)
         handler_change_xray_port  # 处理 Xray 端口配置
         handler_xray_config       # 更新 Xray 配置
