@@ -130,7 +130,7 @@ function append_vless_reality_node() {
     local inbound_index="$2"
     local reality_index="$3"
     local server="$4"
-    local uuid flow network servername short_id public_key path host mode
+    local uuid flow network servername short_id public_key path host mode port
 
     uuid="$(inbound_value "${inbound_index}" '.settings.clients[0].id')"
     flow="$(inbound_value "${inbound_index}" '.settings.clients[0].flow')"
@@ -140,6 +140,7 @@ function append_vless_reality_node() {
     [[ -n "${servername}" ]] || servername="$(echo "${SCRIPT_CONFIG}" | jq -r '.nginx.domain // empty')"
     short_id="$(reality_short_id "${reality_index}")"
     public_key="$(echo "${SCRIPT_CONFIG}" | jq -r '.xray.publicKey // empty')"
+    port="$(echo "${SCRIPT_CONFIG}" | jq -r '.xray.port // 443')"
 
     [[ -n "${uuid}" && -n "${server}" && -n "${servername}" && -n "${public_key}" ]] || return 1
 
@@ -147,7 +148,7 @@ function append_vless_reality_node() {
     PROXY_BUFFER+="  - name: $(yaml_quote "${name}")\n"
     PROXY_BUFFER+="    type: vless\n"
     PROXY_BUFFER+="    server: $(yaml_quote "${server}")\n"
-    PROXY_BUFFER+="    port: 443\n"
+    PROXY_BUFFER+="    port: ${port}\n"
     PROXY_BUFFER+="    uuid: $(yaml_quote "${uuid}")\n"
     PROXY_BUFFER+="    udp: true\n"
     PROXY_BUFFER+="    tls: true\n"
