@@ -57,7 +57,7 @@
 
 8. v2026.09.23.4 fixes the incorrect coupling between Clash/Mihomo remote subscriptions and Xray SNI mode.
    1. Compatible Vision, XHTTP, Fallback, and SNI configs can all publish remote subscriptions; `.xray.tag == SNI` is no longer required.
-   2. Subscription hosting is independent from the Xray data path: reuse an existing Nginx HTTPS site when available, otherwise optionally start a lightweight HTTP static subscription service.
+   2. Subscription hosting is independent from the Xray data path: reuse an existing Nginx HTTPS site when available, otherwise optionally start a lightweight HTTP static subscription service on port 80 by default or a user-selected port.
    3. The lightweight HTTP backend serves only the random-token `clash.yaml` path, has no directory listing or web UI, and is managed by systemd.
    4. The HTTP backend self-tests the local subscription URL after startup; port conflicts or startup failures do not produce an enabled subscription state.
    5. Plain HTTP is unencrypted and the subscription contains proxy credentials, so the script displays an explicit warning before enabling it.
@@ -112,7 +112,7 @@ The main menu now includes `Clash/Mihomo Config & Subscription`:
 - `Rotate subscription URL token`: invalidates the old URL immediately.
 - `Disable remote subscription`: disables the active subscription backend while keeping the local YAML.
 
-Remote subscription hosting is independent from the Vision/Reality/XHTTP data path. With an existing Nginx HTTPS site, URLs look like `https://domain/sub/<random-token>/clash.yaml`; without reusable HTTPS, the optional lightweight HTTP backend uses `http://server-ip:18080/sub/<random-token>/clash.yaml`. Plain HTTP is unencrypted and the subscription contains proxy credentials, so use it only if you accept that risk and rotate the token if the URL may have leaked.
+Remote subscription hosting is independent from the Vision/Reality/XHTTP data path. With an existing Nginx HTTPS site, URLs look like `https://domain/sub/<random-token>/clash.yaml`; without reusable HTTPS, the optional lightweight HTTP backend prompts for a port. Press Enter for the default port `80`, or enter another value from `1-65535`. Port 80 produces `http://server-ip/sub/<random-token>/clash.yaml`; a custom port produces `http://server-ip:<port>/sub/<random-token>/clash.yaml`. The script does not silently choose another port when the selected one is busy. Plain HTTP is unencrypted and the subscription contains proxy credentials, so use it only if you accept that risk and rotate the token if the URL may have leaked.
 
 The generator currently supports Vision+Reality, VLESS+XHTTP+Reality, Fallback, and compatible VLESS nodes in SNI mode. Mihomo does not currently support VLESS+mKCP or Trojan+XHTTP, so those combinations are rejected instead of generating misleading configs.
 
