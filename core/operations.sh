@@ -223,9 +223,11 @@ function handler_backup_restore() {
 
     if [[ -n "${candidate_script}" ]]; then
         snapshot_script_config_for_xray_change
+        trap '[[ -f "${SCRIPT_CONFIG_PENDING_PATH}" ]] && restore_pending_script_config >/dev/null 2>&1 || true' EXIT
         SCRIPT_CONFIG="${candidate_script}"
         persist_script_config
         apply_xray_config "xray:regenerate:backup-restore:$(basename "${selected}")" "restart"
+        trap - EXIT
     else
         apply_xray_config "backup:restore:$(basename "${selected}")" "restart"
         SCRIPT_CONFIG="$(echo "${SCRIPT_CONFIG}" | jq --argjson rules "$(echo "${XRAY_CONFIG}" | jq '.routing.rules // []')" '.rules = $rules')"
@@ -290,9 +292,11 @@ function handler_import_config() {
         { rm -rf "${work}"; _error "Invalid Xray config in bundle"; }
 
     snapshot_script_config_for_xray_change
+    trap '[[ -f "${SCRIPT_CONFIG_PENDING_PATH}" ]] && restore_pending_script_config >/dev/null 2>&1 || true' EXIT
     SCRIPT_CONFIG="${candidate_script}"
     persist_script_config
     apply_xray_config "xray:regenerate:bundle-import" "restart"
+    trap - EXIT
     rm -rf "${work}"
     ops_info "Config bundle imported successfully"
 }
