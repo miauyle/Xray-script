@@ -55,6 +55,13 @@
 
 ## Changelog
 
+13. v2026.09.23.9 completes the operations and safety-management features.
+   1. Finish `apply_xray_config` migration with validation, automatic backup, atomic replace, and restart-failure rollback.
+   2. Add backup restore, config export/import, Doctor, and Xray/WARP/Clash log views.
+   3. Add WARP container/SOCKS/egress IP/country checks and optional Direct fallback using Xray observatory + balancer.
+   4. Unify Direct/WARP/Block routing management and persist custom routing state.
+   5. Add Auto/IPv4/IPv6 Direct egress policy and preserve it across protocol regeneration.
+   6. Add a central Operations & Diagnostics menu.
 12. v2026.09.23.8 introduces the unified `apply_xray_config` safe-write entry point and migrates routing changes first.
    1. Stage the candidate config in the same directory as the live file and validate it with `xray run -test -format=json`.
    2. After validation, back up the current config and preserve the live file's permissions and owner/group.
