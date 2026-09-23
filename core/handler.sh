@@ -55,6 +55,7 @@ readonly NGINX_CONFIG_DIR="/usr/local/nginx/conf" # Nginx 配置目录 (目标�
 readonly GENERATE_PATH="${CUR_DIR}/generate.sh" # 生成器脚本
 readonly CHECK_PATH="${CUR_DIR}/check.sh"       # 检查器脚本
 readonly SHARE_PATH="${CUR_DIR}/share.sh"       # 分享链接生成脚本
+readonly CLASH_PATH="${CUR_DIR}/clash.sh"       # Clash/Mihomo 配置与订阅脚本
 readonly READ_PATH="${CUR_DIR}/read.sh"         # 用户输入读取脚本
 readonly NGINX_PATH="${SERVICE_DIR}/nginx.sh"   # Nginx 服务管理脚本
 readonly SSL_PATH="${SERVICE_DIR}/ssl.sh"       # SSL 证书管理脚本
@@ -1735,6 +1736,10 @@ function handler_share() {
     bash "${SHARE_PATH}"
 }
 
+function handler_clash() {
+    bash "${CLASH_PATH}" "$@"
+}
+
 # =============================================================================
 # 函数名称: handler_traffic
 # 功能描述: 调用 traffic.sh 脚本显示流量统计。
@@ -2356,6 +2361,7 @@ function main() {
     --ca-server) handler_ca_server "$1" ;;
     --custom-sites) handler_custom_sites "$1" ;;
     --share) handler_share ;;                   # 显示分享链接
+    --clash) handler_clash "$@" ;;              # Clash/Mihomo 配置与订阅
     --nginx-cron) handler_nginx_cron ;;         # 管理 Nginx Cron
     --geodata-cron) handler_geodata_cron ;;     # 管理 GeoData Cron
     --warp) handler_warp ;;                     # 管理 WARP

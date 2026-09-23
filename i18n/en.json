@@ -38,7 +38,8 @@
       "option7": "Share Link & QR Code",
       "option8": "Traffic Statistics",
       "option9": "Manage Configuration",
-      "option0": "Exit"
+      "option0": "Exit",
+      "option10": "Clash/Mihomo Config & Subscription"
     },
     "full_installation": {
       "title": "Installation Flow",
@@ -159,6 +160,19 @@
     },
     "route_rule_types": {
       "title": "Select Rule Group"
+    },
+    "clash_subscription": {
+      "title": "Clash/Mihomo Config & Subscription",
+      "option1": "Generate/refresh local YAML",
+      "option2": "Enable/refresh HTTPS subscription",
+      "option3": "Show subscription info",
+      "option4": "Rotate subscription URL token",
+      "option5": "Disable HTTPS subscription",
+      "info1": "Generate a Clash Verge Rev / Mihomo YAML from the current Xray config",
+      "info2": "Remote HTTPS subscription is available only with SNI + Nginx and adds no resident service",
+      "info3": "Show the local YAML path and current remote subscription URL",
+      "info4": "Generate a new random token so the old subscription URL stops working",
+      "info5": "Remove the remote subscription endpoint while keeping the local YAML"
     }
   },
   "handler": {
@@ -533,5 +547,30 @@
       "opt_purge": "Uninstall Nginx",
       "opt_help": "Show this help message"
     }
+  },
+  "clash": {
+    "script_config_missing": "Script config file is missing",
+    "xray_config_missing": "Xray config file is missing",
+    "script_config_invalid": "Script config is not valid JSON",
+    "xray_config_invalid": "Xray config is not valid JSON",
+    "public_ip_failed": "Failed to detect the server public IPv4 address",
+    "reality_compat_warning": "Mihomo warns that Reality may be incompatible with Xray v26.7.11+; current Xray version:",
+    "no_supported_nodes": "No Mihomo-compatible nodes were found in the current Xray config",
+    "node_generation_failed": "Failed to generate a Mihomo node because required fields are missing",
+    "unsupported_mkcp": "Mihomo currently does not support VLESS + mKCP; no invalid config was generated",
+    "unsupported_trojan_xhttp": "Mihomo currently does not support Trojan + XHTTP; no invalid config was generated",
+    "temp_failed": "Failed to create a temporary YAML file",
+    "generated": "Generated Clash/Mihomo config",
+    "token_failed": "Failed to generate subscription token",
+    "remote_requires_sni": "HTTPS remote subscription requires SNI + Nginx; local YAML generation is still available",
+    "nginx_missing": "Nginx was not found; cannot publish an HTTPS subscription",
+    "domain_missing": "SNI domain is empty; cannot build an HTTPS subscription URL",
+    "nginx_update_failed": "Failed to update Nginx site config",
+    "nginx_validation_failed": "Nginx config validation failed; subscription config was not loaded",
+    "remote_disabled": "Clash/Mihomo HTTPS remote subscription disabled",
+    "local_file": "Local YAML",
+    "remote_url": "Remote subscription URL",
+    "disabled": "disabled",
+    "unsupported_action": "Unsupported Clash/Mihomo action"
   }
 }

@@ -133,6 +133,7 @@ function menu_index() {
     echo -e "${GREEN}7.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.index.option7")"
     echo -e "${GREEN}8.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.index.option8")"
     echo -e "${GREEN}9.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.index.option9")"
+    echo -e "${GREEN}10.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.index.option10")"
 
     # 打印退出选项
     echo -e "------------------------------------------------------"
@@ -429,6 +430,22 @@ function menu_custom_sites() {
     echo -e "------------------------------------------------------"
 }
 
+function menu_clash_subscription() {
+    echo -e "------------------ $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.clash_subscription.title") ------------------"
+    echo -e "${GREEN}1.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.clash_subscription.option1")"
+    echo -e "${GREEN}2.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.clash_subscription.option2")"
+    echo -e "${GREEN}3.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.clash_subscription.option3")"
+    echo -e "${GREEN}4.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.clash_subscription.option4")"
+    echo -e "${GREEN}5.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.clash_subscription.option5")"
+    echo -e "------------------------------------------------------"
+    echo -e "1. $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.clash_subscription.info1")"
+    echo -e "2. $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.clash_subscription.info2")"
+    echo -e "3. $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.clash_subscription.info3")"
+    echo -e "4. $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.clash_subscription.info4")"
+    echo -e "5. $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.clash_subscription.info5")"
+    echo -e "------------------------------------------------------"
+}
+
 # =============================================================================
 # 函数名称: print_banner
 # 功能描述: 随机打印一个 ASCII 艺术风格的 Banner。
@@ -553,6 +570,7 @@ function main() {
     --route-rule-types) menu_route_rule_types >&2 ;;
     --sni) menu_sni_config >&2 ;;         # 显示 SNI 配置菜单
     --custom-sites) menu_custom_sites >&2 ;;
+    --clash) menu_clash_subscription >&2 ;;
     --banner) print_banner >&2 ;;         # 显示 Banner
     --status) print_status >&2 ;;         # 显示状态信息
     esac
