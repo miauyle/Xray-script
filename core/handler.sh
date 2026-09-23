@@ -613,10 +613,11 @@ function backup_xray_config() {
     mkdir -p "${XRAY_BACKUP_DIR}" || _error "Failed to create Xray backup directory"
     chmod 700 "${XRAY_BACKUP_DIR}" || _error "Failed to secure Xray backup directory"
 
-    local timestamp temp_backup backup_path
+    local timestamp temp_backup backup_path script_backup_path
     timestamp="$(date '+%Y%m%d-%H%M%S')"
     temp_backup="$(mktemp "${XRAY_BACKUP_DIR}/config-${timestamp}.XXXXXX")" || _error "Failed to create Xray config backup"
     backup_path="${temp_backup}.json"
+    script_backup_path="${backup_path/config-/script-}"
 
     if ! cp -p "${XRAY_CONFIG_PATH}" "${temp_backup}"; then
         rm -f "${temp_backup}"
@@ -631,6 +632,18 @@ function backup_xray_config() {
         _error "Failed to finalize Xray config backup; original config was not modified"
     fi
 
+    # 同步保存脚本状态，供恢复菜单成对还原协议/端口/routing/WARP 等元数据。
+    if [[ -f "${SCRIPT_CONFIG_PATH}" ]]; then
+        if ! cp -p "${SCRIPT_CONFIG_PATH}" "${script_backup_path}"; then
+            rm -f "${backup_path}" "${script_backup_path}"
+            _error "Failed to back up script state; original Xray config was not modified"
+        fi
+        chmod 600 "${script_backup_path}" || {
+            rm -f "${backup_path}" "${script_backup_path}"
+            _error "Failed to secure script-state backup; original Xray config was not modified"
+        }
+    fi
+
     local -a backups=()
     local i
     mapfile -t backups < <(
@@ -642,7 +655,9 @@ function backup_xray_config() {
     LAST_XRAY_BACKUP="${backup_path}"
 
     for ((i = XRAY_BACKUP_KEEP; i < ${#backups[@]}; i++)); do
-        if ! rm -f "${XRAY_BACKUP_DIR}/${backups[${i}]}"; then
+        local old_config="${XRAY_BACKUP_DIR}/${backups[${i}]}"
+        local old_script="${old_config/config-/script-}"
+        if ! rm -f "${old_config}" "${old_script}"; then
             echo -e "${YELLOW}[$(echo "$I18N_DATA" | jq -r '.title.warn')]${NC} Failed to remove old Xray backup: ${backups[${i}]}" >&2
         fi
     done
@@ -1055,7 +1070,7 @@ function handler_reset_script_config() {
         ;;
     esac
     # 将重置后的脚本配置写入文件
-    echo "${SCRIPT_CONFIG}" >"${SCRIPT_CONFIG_PATH}" && sleep 2
+    persist_script_config
 }
 
 function handler_ca_server() {
@@ -1105,7 +1120,7 @@ function handler_ca_server() {
     done
 
     SCRIPT_CONFIG="$(echo "${SCRIPT_CONFIG}" | jq --arg caServer "${target_ca_server,,}" '.nginx.ca_server = $caServer')"
-    echo "${SCRIPT_CONFIG}" >"${SCRIPT_CONFIG_PATH}" && sleep 2
+    persist_script_config
     exec_ssl '--set-ca' "--ca=${target_ca_server}" || _error "failed to set acme default ca"
     handler_update_ocsp_config "${target_ca_server}" 'y'
 }
@@ -1242,7 +1257,7 @@ function handler_script_config() {
     SCRIPT_CONFIG="$(echo "${SCRIPT_CONFIG}" | jq --arg tag "${CONFIG_TAG}" '.xray.tag = $tag')"
     SCRIPT_CONFIG="$(echo "${SCRIPT_CONFIG}" | jq --argjson port "${XRAY_PORT}" '.xray.port = $port')"
     # 将更新后的脚本配置写入文件
-    echo "${SCRIPT_CONFIG}" >"${SCRIPT_CONFIG_PATH}" && sleep 2
+    persist_script_config
 }
 
 # =============================================================================
@@ -1273,7 +1288,7 @@ function handler_x25519_config() {
     SCRIPT_CONFIG="$(echo "${SCRIPT_CONFIG}" | jq --arg publicKey "${PUBLIC_KEY}" '.xray.publicKey = $publicKey')"
     SCRIPT_CONFIG="$(echo "${SCRIPT_CONFIG}" | jq --arg hash32 "${HASH32}" '.xray.hash32 = $hash32')"
     # 将更新后的脚本配置写入文件
-    echo "${SCRIPT_CONFIG}" >"${SCRIPT_CONFIG_PATH}" && sleep 2
+    persist_script_config
 }
 
 # =============================================================================
@@ -1289,6 +1304,7 @@ function handler_x25519_config() {
 # 返回值: 无 (直接修改 XRAY_CONFIG 全局变量和 XRAY_CONFIG_PATH/SCRIPT_CONFIG_PATH 文件)
 # =============================================================================
 function handler_xray_config() {
+    local apply_mode="${1:-apply}"
     # 打印绿色的 Xray 配置更新提示
     echo -e "${GREEN}[$(echo "$I18N_DATA" | jq -r '.title.config')]${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.xray.config_update")" >&2
     # 从脚本配置中读取各项参数
@@ -1419,8 +1435,12 @@ function handler_xray_config() {
     XRAY_RULES="$(echo "${XRAY_CONFIG}" | jq '.routing.rules')"
     # 更新脚本配置中的路由规则
     SCRIPT_CONFIG="$(echo "${SCRIPT_CONFIG}" | jq --argjson rules "${XRAY_RULES}" '.rules = $rules')"
-    # 统一执行 Xray 配置校验、自动备份和安全写入；成功后再保存脚本配置。
-    apply_xray_config "xray:regenerate"
+    # 统一执行 Xray 配置校验、自动备份和安全写入。
+    case "${apply_mode}" in
+    defer) ;;
+    restart) apply_xray_config "xray:regenerate" "restart" ;;
+    *) apply_xray_config "xray:regenerate" ;;
+    esac
     persist_script_config
 }
 
@@ -1784,7 +1804,7 @@ function handler_xray_version() {
     # 更新脚本配置中的 Xray 版本
     SCRIPT_CONFIG="$(echo "${SCRIPT_CONFIG}" | jq --arg xray "${CONFIG_DATA['version']}" '.xray.version = $xray')"
     # 将更新后的脚本配置写入文件
-    echo "${SCRIPT_CONFIG}" >"${SCRIPT_CONFIG_PATH}" && sleep 2
+    persist_script_config
 }
 
 # =============================================================================
@@ -1817,7 +1837,7 @@ function handler_change_xray_port() {
     # 更新脚本配置中的 Xray 端口
     SCRIPT_CONFIG="$(echo "${SCRIPT_CONFIG}" | jq --argjson port "${XRAY_PORT}" '.xray.port = $port')"
     # 将更新后的脚本配置写入文件
-    echo "${SCRIPT_CONFIG}" >"${SCRIPT_CONFIG_PATH}" && sleep 2
+    persist_script_config
 }
 
 # =============================================================================
@@ -1860,7 +1880,7 @@ function handler_purge() {
     # 重置 xray 字段
     SCRIPT_CONFIG=$(reset_json_fields "${SCRIPT_CONFIG}" 'xray')
     # 将重置后的脚本配置写入文件
-    echo "${SCRIPT_CONFIG}" >"${SCRIPT_CONFIG_PATH}" && sleep 2
+    persist_script_config
 }
 
 # =============================================================================
@@ -2033,6 +2053,8 @@ function handler_warp() {
         persist_script_config
         exec_docker '--disable-warp'
     else
+        # 新启用阶段如果后续校验/重启失败，自动清理刚创建的 WARP 容器。
+        trap 'bash "${DOCKER_PATH}" --disable-warp >/dev/null 2>&1 || true' EXIT
         exec_docker '--build-warp'
         local container_ip="$(exec_docker '--enable-warp')"
         [[ -n "${container_ip}" ]] || _error "Failed to obtain WARP container IP"
@@ -2045,6 +2067,7 @@ function handler_warp() {
 
         apply_xray_config "warp:enable" "restart"
         persist_script_config
+        trap - EXIT
     fi
 }
 # =============================================================================
@@ -2104,7 +2127,7 @@ function handler_nginx_install() {
         # 更新脚本配置中的 Nginx 版本
         SCRIPT_CONFIG=$(echo "${SCRIPT_CONFIG}" | jq --arg version "${NGINX_VERSION}" '.nginx.version = $version')
         # 将更新后的脚本配置写入文件
-        echo "${SCRIPT_CONFIG}" >"${SCRIPT_CONFIG_PATH}" && sleep 2 || _error "failed to persist nginx version"
+        persist_script_config
     fi
 }
 
@@ -2131,7 +2154,7 @@ function handler_nginx_purge() {
     # 重置 nginx 字段
     SCRIPT_CONFIG=$(reset_json_fields "${SCRIPT_CONFIG}" 'nginx')
     # 将重置后的脚本配置写入文件
-    echo "${SCRIPT_CONFIG}" >"${SCRIPT_CONFIG_PATH}" && sleep 2
+    persist_script_config
 }
 
 # =============================================================================
@@ -2468,7 +2491,7 @@ function handler_web() {
     # 更新脚本配置中的 Web 类型
     SCRIPT_CONFIG="$(echo "${SCRIPT_CONFIG}" | jq --arg web "${web}" '.nginx.web = $web')"
     # 将更新后的脚本配置写入文件
-    echo "${SCRIPT_CONFIG}" >"${SCRIPT_CONFIG_PATH}" && sleep 2
+    persist_script_config
 }
 
 # =============================================================================
@@ -2486,24 +2509,14 @@ function handler_web() {
 # 返回值: 无 (通过调用一系列处理器函数执行完整安装流程)
 # =============================================================================
 function handler_quick_install() {
-    local quick_install_type="${1:-Vision}" # 获取快速安装类型参数，默认为 Vision
-    # 配置脚本 (设置各种参数)
+    local quick_install_type="${1:-Vision}"
     handler_script_config "${quick_install_type}"
-    # 安装 Xray (使用 release 版本)
     handler_install 'release'
-    # 生成 x25519 配置
     handler_x25519_config
-    # 配置 Xray (生成并写入 config.json)
-    handler_xray_config
-    # 添加默认的阻止规则
-    add_rule "bt" "protocol" "bittorrent" "block" 1
-    add_rule "cn-ip" "ip" "geoip:cn" "block" "after" "private-ip"
-    add_rule "ad-domain" "domain" "geosite:category-ads-all" "block"
-    # 更新 GeoData 并设置 Cron 任务 (快速模式)
+    # handler_script_config 的 quick 默认会启用 BT/CN/AD 规则，
+    # handler_xray_config 一次生成并安全应用，避免重复三次 apply/backup/restart。
+    handler_xray_config "restart"
     handler_geodata_cron 1
-    # 重启 Xray 服务
-    handler_restart
-    # 显示分享链接
     handler_share
 }
 
@@ -2543,15 +2556,14 @@ function main() {
     --xray-config)
         handler_sni_config "$1" # 处理 SNI 配置
         handler_x25519_config   # 生成 x25519 配置
-        handler_xray_config     # 更新 Xray 配置
+        handler_xray_config "restart" # 更新 Xray 配置并安全重启
         ;;
     --sni-ports) handler_check_sni_ports ;;
     --routing) handler_routing "$@" ;; # 处理路由规则
     --routing-manage) handler_routing_manage "$@" ;; # 管理已有路由规则
     --change-domain)
         handler_change_domain "$1" # 处理域名配置
-        handler_xray_config        # 更新 Xray 配置
-        handler_restart            # 重启 Xray
+        handler_xray_config "restart" # 更新 Xray 配置并在重启失败时回滚
         if ! [[ "${CONFIG_DATA['only-change-domain'],,}" == "y" ]]; then
             # 还原 Web 服务
             handler_web "$(echo "${SCRIPT_CONFIG}" | jq -r '.nginx.web')"
@@ -2580,8 +2592,7 @@ function main() {
     --direct-family) handler_direct_family "$1" ;;
     --change-port)
         handler_change_xray_port  # 处理 Xray 端口配置
-        handler_xray_config       # 更新 Xray 配置
-        handler_restart           # 重启 Xray
+        handler_xray_config "restart" # 更新 Xray 配置并在重启失败时回滚
         handler_share             # 显示分享链接
         ;;                        # 修改 Xray 端口
     --start) handler_start ;;     # 启动 Xray
