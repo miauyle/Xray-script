@@ -54,6 +54,12 @@
 
 ## 更新日志
 
+12. v2026.09.23.8 引入统一 `apply_xray_config` 安全写入入口，并首先迁移 routing 配置修改。
+   1. 候选配置先写入与正式配置同目录的临时文件，再由 `xray run -test -format=json` 校验。
+   2. 校验通过后自动备份当前配置，并保留正式配置原有的权限和 owner/group。
+   3. 使用同文件系统 `mv` 原子替换正式配置，避免 `cat > config.json` 等方式产生部分写入。
+   4. routing 的新增、单项删除、整组清空已直接调用 `apply_xray_config`，并附带具体操作 context。
+   5. `persist_xray_config` 暂时保留为兼容 wrapper，完整配置重生成与 WARP 等调用点后续逐步迁移。
 11. v2026.09.23.7 新增 Xray 配置自动备份，并缩短 Clash/Mihomo 订阅 Token。
    1. 覆盖 `/usr/local/etc/xray/config.json` 前自动备份当前配置到 `~/.xray-script/backups/xray/`。
    2. 备份使用时间戳 + 随机后缀命名，权限为 `600`，备份目录权限为 `700`。
