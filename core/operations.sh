@@ -27,7 +27,74 @@ function ops_get_warp_container_ip() {
 function ops_warp_trace() {
     local container_ip="$1"
     [[ -n "${container_ip}" ]] || return 1
-    curl --noproxy '*' --socks5-hostname "${container_ip}:40001" -fsS --max-time 10         https://www.cloudflare.com/cdn-cgi/trace 2>/dev/null
+
+    # IMPORTANT:
+    # --noproxy '*' disables the explicitly configured proxy as well.
+    # Use an empty no-proxy list so environment NO_PROXY cannot bypass WARP.
+    curl --noproxy ""         --proxy "socks5h://${container_ip}:40001"         -fsS --max-time 10         https://www.cloudflare.com/cdn-cgi/trace 2>/dev/null
+}
+
+function ops_warp_client_status() {
+    docker exec xray-script-warp warp-cli --accept-tos status 2>/dev/null |
+        awk -F': ' '/^Status update:/{print $2; exit}'
+}
+
+function ops_warp_client_mode() {
+    docker exec xray-script-warp warp-cli --accept-tos settings 2>/dev/null |
+        awk -F'Mode: ' '/Mode:/{print $2; exit}'
+}
+
+function handler_warp_status() {
+    local configured container_state container_ip trace egress_ip country warp_state client_status client_mode
+
+    configured="$(echo "${SCRIPT_CONFIG}" | jq -r '.xray.warp // 0')"
+    echo "WARP configured : ${configured}"
+
+    if ! command -v docker >/dev/null 2>&1; then
+        echo "Docker          : unavailable"
+        return 0
+    fi
+
+    container_state="$(docker inspect -f '{{.State.Status}}' xray-script-warp 2>/dev/null || true)"
+    [[ -n "${container_state}" ]] || container_state='missing'
+    echo "Container       : ${container_state}"
+
+    if [[ "${container_state}" != 'running' ]]; then
+        return 0
+    fi
+
+    container_ip="$(ops_get_warp_container_ip || true)"
+    echo "Container IP    : ${container_ip:-unknown}"
+
+    client_status="$(ops_warp_client_status || true)"
+    client_mode="$(ops_warp_client_mode || true)"
+    echo "WARP client     : ${client_status:-unknown}"
+    echo "WARP mode       : ${client_mode:-unknown}"
+
+    trace="$(ops_warp_trace "${container_ip}" || true)"
+    if [[ -z "${trace}" ]]; then
+        echo "SOCKS reachable : failed"
+        echo "WARP data path  : failed"
+        echo "Direct fallback : $(echo "${SCRIPT_CONFIG}" | jq -r 'if (.xray.warp_fallback // 0) == 1 then "enabled" else "disabled" end')"
+        return 0
+    fi
+
+    egress_ip="$(printf '%s\n' "${trace}" | awk -F= '$1=="ip"{print $2; exit}')"
+    country="$(printf '%s\n' "${trace}" | awk -F= '$1=="loc"{print $2; exit}')"
+    warp_state="$(printf '%s\n' "${trace}" | awk -F= '$1=="warp"{print $2; exit}')"
+
+    echo "SOCKS reachable : ok"
+    echo "Egress IP       : ${egress_ip:-unknown}"
+    echo "Country         : ${country:-unknown}"
+    case "${warp_state}" in
+    on | plus)
+        echo "WARP data path  : ok (warp=${warp_state})"
+        ;;
+    *)
+        echo "WARP data path  : FAILED (warp=${warp_state:-unknown})"
+        ;;
+    esac
+    echo "Direct fallback : $(echo "${SCRIPT_CONFIG}" | jq -r 'if (.xray.warp_fallback // 0) == 1 then "enabled" else "disabled" end')"
 }
 
 function handler_warp_status() {
@@ -388,10 +455,17 @@ function handler_doctor() {
                 ip="$(ops_get_warp_container_ip || true)"
                 trace="$(ops_warp_trace "${ip}" || true)"
                 if [[ -n "${trace}" ]]; then
-                    ops_pass "WARP SOCKS egress reachable"
+                    local doctor_warp_state
+                    doctor_warp_state="$(printf '%s\n' "${trace}" | awk -F= '$1=="warp"{print $2; exit}')"
+                    if [[ "${doctor_warp_state}" == 'on' || "${doctor_warp_state}" == 'plus' ]]; then
+                        ops_pass "WARP SOCKS data path active (warp=${doctor_warp_state})"
+                    else
+                        ops_fail "WARP proxy reachable but traffic is not tunneled (warp=${doctor_warp_state:-unknown})"
+                        ((failures++))
+                    fi
                 else
-                    ops_warn "WARP SOCKS egress check failed"
-                    ((warnings++))
+                    ops_fail "WARP SOCKS data path unreachable"
+                    ((failures++))
                 fi
             else
                 ops_fail "WARP configured but container not running"

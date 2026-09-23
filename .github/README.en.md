@@ -55,6 +55,11 @@
 
 ## Changelog
 
+15. v2026.09.23.11 fixes WARP health checks accidentally bypassing the configured proxy.
+   1. Fix `ops_warp_trace` using `--noproxy '*'`, which disabled the explicit SOCKS proxy and incorrectly reported the VPS direct egress.
+   2. Use `--noproxy \"\"` plus explicit `socks5h://<container>:40001` so WARP is forced even when `NO_PROXY` exists in the environment.
+   3. Add WARP client status/mode to the status view and separate `SOCKS reachable` from `WARP data path`.
+   4. Doctor now requires Cloudflare trace to return `warp=on` or `warp=plus`; `warp=off` is a failure.
 14. v2026.09.23.10 carries forward the remaining useful Xray restart reliability improvements from superseded PR #11.
    1. After restart/start, check the active state up to five times with short delays to avoid transient systemd readiness false negatives.
    2. When a post-apply restart fails, print `systemctl status xray` and the latest 40 journal lines before automatic rollback.
