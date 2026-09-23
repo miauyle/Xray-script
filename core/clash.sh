@@ -474,22 +474,42 @@ function rotate_remote() {
 
 function disable_remote() {
     local backup=''
+    local had_config=0
+    mkdir -p "${CLASH_DIR}"
+    chmod 700 "${CLASH_DIR}"
+
     if [[ -f "${NGINX_SUB_CONFIG}" ]]; then
         backup="$(mktemp "${CLASH_DIR}/subscription.conf.bak.XXXXXX")" || fail "$(msg temp_failed)"
         cp -af "${NGINX_SUB_CONFIG}" "${backup}"
+        had_config=1
     fi
+
     mkdir -p "$(dirname "${NGINX_SUB_CONFIG}")"
     printf '%s\n' '# Clash/Mihomo remote subscription is disabled.' >"${NGINX_SUB_CONFIG}"
+
     if command -v nginx >/dev/null 2>&1; then
         if ! nginx -t >/dev/null 2>&1; then
-            [[ -n "${backup}" ]] && cp -af "${backup}" "${NGINX_SUB_CONFIG}"
+            if [[ "${had_config}" -eq 1 ]]; then
+                cp -af "${backup}" "${NGINX_SUB_CONFIG}"
+            else
+                rm -f "${NGINX_SUB_CONFIG}"
+            fi
             rm -f "${backup}"
             fail "$(msg nginx_validation_failed)"
         fi
-        if systemctl -q is-active nginx; then
-            systemctl reload nginx || fail "$(msg nginx_update_failed)"
+
+        if systemctl -q is-active nginx && ! systemctl reload nginx; then
+            if [[ "${had_config}" -eq 1 ]]; then
+                cp -af "${backup}" "${NGINX_SUB_CONFIG}"
+            else
+                rm -f "${NGINX_SUB_CONFIG}"
+            fi
+            nginx -t >/dev/null 2>&1 && systemctl reload nginx >/dev/null 2>&1 || true
+            rm -f "${backup}"
+            fail "$(msg nginx_update_failed)"
         fi
     fi
+
     rm -f "${backup}" "${CLASH_TOKEN_PATH}"
     info "$(msg remote_disabled)"
 }
