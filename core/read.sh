@@ -150,6 +150,8 @@ declare -A param_map=(
     ["--warp-domain"]="rule,warp_domain"
     ["--block-ip"]="rule,block_ip"
     ["--block-domain"]="rule,block_domain"
+    ["--direct-ip"]="rule,direct_ip"
+    ["--direct-domain"]="rule,direct_domain"
 )
 
 # =============================================================================
