@@ -396,10 +396,12 @@ function current_token() {
 }
 
 function generate_token_value() {
-    local token
-    token="$(openssl rand -base64 16 2>/dev/null)" || fail "$(msg token_failed)"
-    token="${token//
-
+    local raw token
+    raw="$(openssl rand -base64 16 2>/dev/null)" || fail "$(msg token_failed)"
+    token="$(printf '%s' "${raw}" | tr '+/' '-_' | tr -d '=[:space:]')"
+    [[ -n "${token}" ]] || fail "$(msg token_failed)"
+    printf '%s' "${token}"
+}
 function save_token() {
     local token="$1"
     mkdir -p "${CLASH_DIR}"
