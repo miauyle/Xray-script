@@ -164,15 +164,15 @@
     "clash_subscription": {
       "title": "Clash/Mihomo 配置与订阅",
       "option1": "生成/刷新本地 YAML",
-      "option2": "开启/刷新 HTTPS 远程订阅",
+      "option2": "开启/刷新远程订阅",
       "option3": "查看订阅信息",
       "option4": "更换订阅 URL Token",
-      "option5": "关闭 HTTPS 远程订阅",
+      "option5": "关闭远程订阅",
       "info1": "从当前 Xray 配置生成 Clash Verge Rev / Mihomo 可用 YAML",
-      "info2": "仅 SNI + Nginx 模式可用，不新增常驻服务",
+      "info2": "优先复用现有 Nginx HTTPS；没有 Nginx/域名时可启用轻量 HTTP 订阅服务",
       "info3": "显示本地 YAML 路径和当前远程订阅 URL",
       "info4": "生成新的随机 Token，旧订阅 URL 立即失效",
-      "info5": "移除远程订阅入口，保留本地 YAML"
+      "info5": "关闭当前远程订阅后端，保留本地 YAML"
     }
   },
   "handler": {
@@ -562,7 +562,6 @@
     "temp_failed": "无法创建临时 YAML 文件",
     "generated": "已生成 Clash/Mihomo 配置",
     "token_failed": "生成订阅 Token 失败",
-    "remote_requires_sni": "HTTPS 远程订阅仅支持 SNI + Nginx 配置；当前仍可使用本地 YAML",
     "nginx_missing": "未检测到 Nginx，无法发布 HTTPS 订阅",
     "domain_missing": "SNI 域名为空，无法生成 HTTPS 订阅 URL",
     "nginx_update_failed": "更新 Nginx 站点配置失败",
@@ -571,6 +570,15 @@
     "local_file": "本地 YAML",
     "remote_url": "远程订阅 URL",
     "disabled": "未启用",
-    "unsupported_action": "不支持的 Clash/Mihomo 操作"
+    "unsupported_action": "不支持的 Clash/Mihomo 操作",
+    "remote_backend_missing": "没有可用的远程订阅后端：未检测到可复用的 Nginx HTTPS，且系统没有 Python 3",
+    "http_warning": "当前使用 HTTP 远程订阅，订阅内容包含节点凭据；链路不加密，仅建议在你接受该风险时使用",
+    "http_prompt": "未检测到可复用的 HTTPS 站点，是否启动轻量 HTTP 订阅服务",
+    "http_port_busy": "HTTP 订阅端口已被占用",
+    "http_service_failed": "轻量 HTTP 订阅服务启动失败",
+    "remote_not_enabled": "远程订阅尚未启用",
+    "remote_backend": "订阅后端",
+    "state_failed": "保存订阅状态失败",
+    "cancelled": "操作已取消"
   }
 }
