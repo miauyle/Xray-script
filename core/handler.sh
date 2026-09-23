@@ -56,6 +56,7 @@ readonly GENERATE_PATH="${CUR_DIR}/generate.sh" # 生成器脚本
 readonly CHECK_PATH="${CUR_DIR}/check.sh"       # 检查器脚本
 readonly SHARE_PATH="${CUR_DIR}/share.sh"       # 分享链接生成脚本
 readonly CLASH_PATH="${CUR_DIR}/clash.sh"       # Clash/Mihomo 配置与订阅脚本
+readonly OPERATIONS_PATH="${CUR_DIR}/operations.sh" # 运维/诊断扩展
 readonly READ_PATH="${CUR_DIR}/read.sh"         # 用户输入读取脚本
 readonly NGINX_PATH="${SERVICE_DIR}/nginx.sh"   # Nginx 服务管理脚本
 readonly SSL_PATH="${SERVICE_DIR}/ssl.sh"       # SSL 证书管理脚本
@@ -73,6 +74,7 @@ readonly ACME_PATH="${HOME}/.acme.sh/acme.sh"                  # ACME.sh 脚本�
 # 声明用于存储配置数据和国际化数据的全局变量
 declare SCRIPT_CONFIG="$(jq '.' "${SCRIPT_CONFIG_PATH}")" # 存储从 config.json 读取的脚本配置
 declare XRAY_CONFIG=""                                    # 存储 Xray 配置 (通常在运行时加载)
+declare LAST_XRAY_BACKUP=''                                # 最近一次 apply 前创建的备份
 declare LANG_PARAM=''                                     # (未在脚本中实际使用，可能是预留)
 declare I18N_DATA=''                                      # 存储从 i18n JSON 文件中读取的全部数据
 # 声明一个关联数组，用于在脚本运行时临时存储用户输入的配置数据
@@ -630,6 +632,8 @@ function backup_xray_config() {
             cut -d' ' -f2-
     )
 
+    LAST_XRAY_BACKUP="${backup_path}"
+
     for ((i = XRAY_BACKUP_KEEP; i < ${#backups[@]}; i++)); do
         if ! rm -f "${XRAY_BACKUP_DIR}/${backups[${i}]}"; then
             echo -e "${YELLOW}[$(echo "$I18N_DATA" | jq -r '.title.warn')]${NC} Failed to remove old Xray backup: ${backups[${i}]}" >&2
@@ -638,18 +642,57 @@ function backup_xray_config() {
 }
 
 # =============================================================================
+# 函数名称: restart_xray_service_checked
+# 功能描述: 重启/启动 Xray 并确认 systemd 最终处于 active。
+# =============================================================================
+function restart_xray_service_checked() {
+    if systemctl -q is-active xray 2>/dev/null; then
+        systemctl restart xray || return 1
+    else
+        systemctl start xray || return 1
+    fi
+    sleep 1
+    systemctl -q is-active xray
+}
+
+function rollback_xray_config() {
+    local backup_path="$1"
+    local context="$2"
+    local temp_config
+
+    [[ -f "${backup_path}" ]] || return 1
+    temp_config="$(mktemp "${XRAY_CONFIG_PATH}.rollback.XXXXXX")" || return 1
+    cp -p "${backup_path}" "${temp_config}" || { rm -f "${temp_config}"; return 1; }
+
+    if ! xray run -test -format=json -c "${temp_config}" >/dev/null 2>&1; then
+        rm -f "${temp_config}"
+        return 1
+    fi
+
+    if [[ -f "${XRAY_CONFIG_PATH}" ]]; then
+        chmod --reference="${XRAY_CONFIG_PATH}" "${temp_config}" 2>/dev/null || true
+        chown --reference="${XRAY_CONFIG_PATH}" "${temp_config}" 2>/dev/null || true
+    fi
+
+    mv -f "${temp_config}" "${XRAY_CONFIG_PATH}" || return 1
+    XRAY_CONFIG="$(jq '.' "${XRAY_CONFIG_PATH}")" || return 1
+    restart_xray_service_checked || return 1
+    echo -e "${YELLOW}[$(echo "$I18N_DATA" | jq -r '.title.warn')]${NC} Xray apply failed and was rolled back [${context}]" >&2
+    return 0
+}
+
+# =============================================================================
 # 函数名称: apply_xray_config
-# 功能描述: 统一安全应用候选 Xray 配置。
-#           1. 将 XRAY_CONFIG 写入同目录临时文件。
-#           2. 使用 Xray 自身校验候选配置。
-#           3. 覆盖前自动备份当前正式配置。
-#           4. 使用同文件系统原子 rename 替换正式配置，避免部分写入。
+# 功能描述: 统一安全应用候选 Xray 配置：校验 -> 备份 -> 原子替换 -> 可选重启/自动回滚。
 # 参数:
-#   $1: context - (可选) 调用场景，仅用于错误信息/后续诊断。
+#   $1: context
+#   $2: restart - "restart" 时应用后重启并在失败时自动 rollback
 # =============================================================================
 function apply_xray_config() {
     local context="${1:-unspecified}"
+    local restart_mode="${2:-no-restart}"
     local temp_config
+    LAST_XRAY_BACKUP=''
 
     temp_config="$(mktemp "${XRAY_CONFIG_PATH}.tmp.XXXXXX")" ||
         _error "Failed to create temporary Xray config [${context}]"
@@ -669,23 +712,15 @@ function apply_xray_config() {
         _error "Xray configuration validation failed; original config was kept [${context}]"
     fi
 
-    # 原子替换会换 inode；保留现有正式配置的权限和 owner/group。
-    # 首次创建时沿用 mktemp 的 root:root / 600。
     if [[ -f "${XRAY_CONFIG_PATH}" ]]; then
-        if ! chmod --reference="${XRAY_CONFIG_PATH}" "${temp_config}"; then
-            rm -f "${temp_config}"
-            _error "Failed to preserve Xray config permissions [${context}]"
-        fi
-        if ! chown --reference="${XRAY_CONFIG_PATH}" "${temp_config}"; then
-            rm -f "${temp_config}"
-            _error "Failed to preserve Xray config ownership [${context}]"
-        fi
+        chmod --reference="${XRAY_CONFIG_PATH}" "${temp_config}" ||
+            { rm -f "${temp_config}"; _error "Failed to preserve Xray config permissions [${context}]"; }
+        chown --reference="${XRAY_CONFIG_PATH}" "${temp_config}" ||
+            { rm -f "${temp_config}"; _error "Failed to preserve Xray config ownership [${context}]"; }
     fi
 
-    # backup_xray_config 内部保证：备份失败时不会继续覆盖正式配置。
     backup_xray_config
 
-    # temp_config 与正式配置位于同一目录，mv 在同一文件系统内完成原子替换。
     if ! mv -f "${temp_config}" "${XRAY_CONFIG_PATH}"; then
         rm -f "${temp_config}"
         _error "Failed to atomically replace Xray configuration [${context}]"
@@ -693,16 +728,15 @@ function apply_xray_config() {
 
     XRAY_CONFIG="$(jq '.' "${XRAY_CONFIG_PATH}")" ||
         _error "Failed to reload applied Xray configuration [${context}]"
-    sleep 2
-}
 
-# =============================================================================
-# 函数名称: persist_xray_config
-# 功能描述: 兼容旧调用点的过渡包装器。
-#           新代码应直接调用 apply_xray_config；其余调用点后续逐步迁移。
-# =============================================================================
-function persist_xray_config() {
-    apply_xray_config "legacy:persist"
+    if [[ "${restart_mode}" == 'restart' ]]; then
+        if ! restart_xray_service_checked; then
+            if [[ -n "${LAST_XRAY_BACKUP}" ]] && rollback_xray_config "${LAST_XRAY_BACKUP}" "${context}"; then
+                _error "Xray restart failed; previous configuration was restored [${context}]"
+            fi
+            _error "Xray restart failed and automatic rollback was unavailable [${context}]"
+        fi
+    fi
 }
 
 # =============================================================================
@@ -1320,7 +1354,7 @@ function handler_xray_config() {
     # 更新脚本配置中的路由规则
     SCRIPT_CONFIG="$(echo "${SCRIPT_CONFIG}" | jq --argjson rules "${XRAY_RULES}" '.rules = $rules')"
     # 统一执行 Xray 配置校验、自动备份和安全写入；成功后再保存脚本配置。
-    persist_xray_config
+    apply_xray_config "xray:regenerate"
     echo "${SCRIPT_CONFIG}" >"${SCRIPT_CONFIG_PATH}" && sleep 2
 }
 
@@ -1935,7 +1969,7 @@ function handler_warp() {
     # 更新脚本配置中的 WARP 状态
     SCRIPT_CONFIG=$(echo "${SCRIPT_CONFIG}" | jq --arg warp "${WARP_STATUS}" '.xray.warp = $warp')
     # 统一执行 Xray 配置校验、自动备份和安全写入；成功后再保存脚本配置。
-    persist_xray_config
+    apply_xray_config "warp:toggle" "restart"
     echo "${SCRIPT_CONFIG}" >"${SCRIPT_CONFIG_PATH}" && sleep 2
 }
 
