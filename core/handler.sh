@@ -700,14 +700,29 @@ function backup_xray_config() {
 # 函数名称: restart_xray_service_checked
 # 功能描述: 重启/启动 Xray 并确认 systemd 最终处于 active。
 # =============================================================================
+function print_xray_service_diagnostics() {
+    echo -e "${YELLOW}----- xray status -----${NC}" >&2
+    systemctl status xray --no-pager -l >&2 2>/dev/null || true
+    echo -e "${YELLOW}----- recent xray journal -----${NC}" >&2
+    journalctl -u xray -n 40 --no-pager -o cat >&2 2>/dev/null || true
+}
+
 function restart_xray_service_checked() {
+    local attempt
+
     if systemctl -q is-active xray 2>/dev/null; then
-        systemctl restart xray || return 1
+        systemctl restart xray >/dev/null 2>&1 || return 1
     else
-        systemctl start xray || return 1
+        systemctl start xray >/dev/null 2>&1 || return 1
     fi
-    sleep 1
-    systemctl -q is-active xray
+
+    systemctl -q is-enabled xray 2>/dev/null || systemctl enable xray >/dev/null 2>&1 || true
+
+    for attempt in 1 2 3 4 5; do
+        systemctl -q is-active xray 2>/dev/null && return 0
+        sleep 0.4
+    done
+    return 1
 }
 
 function rollback_xray_config() {
@@ -799,6 +814,7 @@ function apply_xray_config() {
 
     if [[ "${restart_mode}" == 'restart' ]]; then
         if ! restart_xray_service_checked; then
+            print_xray_service_diagnostics
             if [[ -n "${LAST_XRAY_BACKUP}" ]] && rollback_xray_config "${LAST_XRAY_BACKUP}" "${context}"; then
                 _error "Xray restart failed; previous configuration was restored [${context}]"
             fi
@@ -1986,10 +2002,10 @@ function handler_stop() {
 # 返回值: 无 (通过 systemctl 命令执行操作)
 # =============================================================================
 function handler_restart() {
-    # 检查 Xray 服务是否活跃，如果活跃则重启，否则启动
-    systemctl -q is-active xray && systemctl -q restart xray || systemctl -q start xray
-    # 检查 Xray 服务是否已启用，如果未启用则启用
-    systemctl -q is-enabled xray || systemctl -q enable xray
+    if ! restart_xray_service_checked; then
+        print_xray_service_diagnostics
+        _error "Xray service restart failed"
+    fi
 }
 
 # =============================================================================
