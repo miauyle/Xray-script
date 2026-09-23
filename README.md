@@ -54,6 +54,11 @@
 
 ## 更新日志
 
+15. v2026.09.23.11 修复 WARP 健康检查误绕过代理的问题。
+   1. 修复 `ops_warp_trace` 使用 `--noproxy '*'` 导致 curl 完全绕过 SOCKS、错误显示 Oracle/VPS 直连出口的问题。
+   2. 改为 `--noproxy \"\"` + 显式 `socks5h://<container>:40001`，确保即使系统存在 `NO_PROXY` 环境变量也强制走 WARP SOCKS。
+   3. WARP 状态页新增 client status / mode，并将运行时结果拆分为 `SOCKS reachable` 与 `WARP data path`。
+   4. Doctor 现在要求 Cloudflare trace 返回 `warp=on` 或 `warp=plus` 才判定 WARP 数据路径健康；`warp=off` 直接报 FAIL。
 14. v2026.09.23.10 吸收旧 PR #11 中仍有价值的 Xray 重启可靠性改进。
    1. Xray restart/start 后最多进行 5 次短间隔 active 检查，降低 systemd 服务启动瞬间造成的误判。
    2. apply 后重启失败时，在自动 rollback 前打印 `systemctl status xray` 和最近 40 行 journal，便于直接看到真实失败原因。
