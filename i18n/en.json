@@ -164,15 +164,15 @@
     "clash_subscription": {
       "title": "Clash/Mihomo Config & Subscription",
       "option1": "Generate/refresh local YAML",
-      "option2": "Enable/refresh HTTPS subscription",
+      "option2": "Enable/refresh remote subscription",
       "option3": "Show subscription info",
       "option4": "Rotate subscription URL token",
-      "option5": "Disable HTTPS subscription",
+      "option5": "Disable remote subscription",
       "info1": "Generate a Clash Verge Rev / Mihomo YAML from the current Xray config",
-      "info2": "Remote HTTPS subscription is available only with SNI + Nginx and adds no resident service",
+      "info2": "Prefer an existing Nginx HTTPS site; otherwise enable the lightweight HTTP server on port 80 by default or choose another port",
       "info3": "Show the local YAML path and current remote subscription URL",
       "info4": "Generate a new random token so the old subscription URL stops working",
-      "info5": "Remove the remote subscription endpoint while keeping the local YAML"
+      "info5": "Disable the active remote backend while keeping the local YAML"
     }
   },
   "handler": {
@@ -562,15 +562,27 @@
     "temp_failed": "Failed to create a temporary YAML file",
     "generated": "Generated Clash/Mihomo config",
     "token_failed": "Failed to generate subscription token",
-    "remote_requires_sni": "HTTPS remote subscription requires SNI + Nginx; local YAML generation is still available",
     "nginx_missing": "Nginx was not found; cannot publish an HTTPS subscription",
     "domain_missing": "SNI domain is empty; cannot build an HTTPS subscription URL",
     "nginx_update_failed": "Failed to update Nginx site config",
     "nginx_validation_failed": "Nginx config validation failed; subscription config was not loaded",
-    "remote_disabled": "Clash/Mihomo HTTPS remote subscription disabled",
+    "remote_disabled": "Clash/Mihomo remote subscription disabled",
     "local_file": "Local YAML",
     "remote_url": "Remote subscription URL",
     "disabled": "disabled",
-    "unsupported_action": "Unsupported Clash/Mihomo action"
+    "unsupported_action": "Unsupported Clash/Mihomo action",
+    "remote_backend_missing": "No remote subscription backend is available: no reusable Nginx HTTPS site and Python 3 is not installed",
+    "http_warning": "The remote subscription is using plain HTTP and contains proxy credentials; use it only if you accept the unencrypted transport risk",
+    "http_prompt": "No reusable HTTPS site was found. Start the lightweight HTTP subscription server",
+    "http_port_busy": "HTTP subscription port is already in use",
+    "http_service_failed": "Failed to start the lightweight HTTP subscription server",
+    "remote_not_enabled": "Remote subscription is not enabled",
+    "remote_backend": "Subscription backend",
+    "state_failed": "Failed to save subscription state",
+    "cancelled": "Operation cancelled",
+    "old_backend_cleanup_failed": "The new subscription backend is active, but cleanup of the old backend failed; please inspect it manually",
+    "http_firewall_hint": "If the subscription is unreachable externally, make sure this TCP port is allowed by the VPS/cloud firewall",
+    "http_port_prompt": "Enter the HTTP subscription port; press Enter to use the default",
+    "http_port_invalid": "Invalid HTTP subscription port; enter a value from 1 to 65535"
   }
 }
