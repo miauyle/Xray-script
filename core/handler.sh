@@ -777,6 +777,7 @@ function add_rule() {
     local outboundTag=$4 # 获取出站标签
     local position=$5    # 获取插入位置参数
     local target_tag=$6  # 获取目标规则标签参数
+    local apply_mode="${7:-apply}" # apply / restart / defer
     # 如果 XRAY_CONFIG 未初始化，则从文件加载
     XRAY_CONFIG="${XRAY_CONFIG:-$(jq '.' "${XRAY_CONFIG_PATH}")}"
     # 检查是否存在具有相同 ruleTag 的规则
@@ -793,8 +794,14 @@ function add_rule() {
             XRAY_CONFIG="$(echo "${XRAY_CONFIG}" | jq --arg ruleTag "${rule_tag}" --argjson value "${value}" '.routing.rules |= map(if .ruleTag == $ruleTag then .ip += $value | .ip |= unique else . end)')"
         fi
     else
-        # 规则不存在，创建新的规则 JSON 对象
-        local new_rule="[{\"ruleTag\":\"${rule_tag}\",\"${domain_or_ip}\":${value},\"outboundTag\":\"${outboundTag}\"}]"
+        # 规则不存在，创建新的规则 JSON 对象。
+        # WARP direct fallback 启用时，新 WARP 规则指向 balancerTag，而不是固定 outboundTag。
+        local new_rule
+        if [[ "${outboundTag}" == 'warp' && "$(echo "${SCRIPT_CONFIG}" | jq -r '.xray.warp_fallback // 0')" -eq 1 ]]; then
+            new_rule="[{\"ruleTag\":\"${rule_tag}\",\"${domain_or_ip}\":${value},\"balancerTag\":\"warp-fallback\"}]"
+        else
+            new_rule="[{\"ruleTag\":\"${rule_tag}\",\"${domain_or_ip}\":${value},\"outboundTag\":\"${outboundTag}\"}]"
+        fi
         # 如果指定了 target_tag
         if [[ -n "${target_tag}" ]]; then
             # 检查 target_tag 对应的规则是否存在
@@ -829,8 +836,11 @@ function add_rule() {
             fi
         fi
     fi
-    # Routing 已迁移到新的统一安全写入入口。
-    apply_xray_config "routing:add:${rule_tag}"
+    case "${apply_mode}" in
+    defer) ;;
+    restart) apply_xray_config "routing:add:${rule_tag}" "restart" ;;
+    *) apply_xray_config "routing:add:${rule_tag}" ;;
+    esac
 }
 
 # =============================================================================
@@ -859,13 +869,13 @@ function handler_routing() {
     # 调用 exec_read 读取用户输入的规则值
     exec_read "${rule_tag}"
     # 调用 add_rule 将规则添加到 Xray 配置中
-    add_rule "${rule_tag}" "${rule_target}" "${CONFIG_DATA[${rule_tag}]}" "${rule_type}"
+    add_rule "${rule_tag}" "${rule_target}" "${CONFIG_DATA[${rule_tag}]}" "${rule_type}" "" "" "restart"
 }
 
 function routing_rule_field() {
     case "$1" in
-    block-ip | warp-ip) echo 'ip' ;;
-    block-domain | warp-domain) echo 'domain' ;;
+    block-ip | warp-ip | direct-ip) echo 'ip' ;;
+    block-domain | warp-domain | direct-domain) echo 'domain' ;;
     *) return 1 ;;
     esac
 }
@@ -904,7 +914,7 @@ function print_routing_rule_group() {
 function handler_routing_rule_list() {
     load_current_xray_config
     local rule_tag
-    for rule_tag in block-ip block-domain warp-ip warp-domain; do
+    for rule_tag in block-ip block-domain warp-ip warp-domain direct-ip direct-domain; do
         print_routing_rule_group "${rule_tag}"
     done
 }
@@ -952,8 +962,7 @@ function handler_routing_rule_delete() {
         )
     ')"
 
-    apply_xray_config "routing:delete:${rule_tag}"
-    handler_restart
+    apply_xray_config "routing:delete:${rule_tag}" "restart"
     echo -e "${GREEN}[$(echo "$I18N_DATA" | jq -r '.title.info')]${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.routing.deleted")"
 }
 
@@ -984,8 +993,7 @@ function handler_routing_rule_clear() {
         XRAY_CONFIG="$(echo "${XRAY_CONFIG}" | jq --arg ruleTag "${rule_tag}" '
             .routing.rules |= map(select(.ruleTag != $ruleTag))
         ')"
-        apply_xray_config "routing:clear:${rule_tag}"
-        handler_restart
+        apply_xray_config "routing:clear:${rule_tag}" "restart"
         echo -e "${GREEN}[$(echo "$I18N_DATA" | jq -r '.title.info')]${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.routing.cleared")"
         ;;
     *)
@@ -1335,9 +1343,9 @@ function handler_xray_config() {
         ;;
     1)
         # 重置并添加默认路由规则
-        [[ "${XRAY_RULES_BT}" -eq 1 ]] && add_rule "bt" "protocol" "bittorrent" "block" 1
-        [[ "${XRAY_RULES_CN}" -eq 1 ]] && add_rule "cn-ip" "ip" "geoip:cn" "block" "after" "private-ip"
-        [[ "${XRAY_RULES_AD}" -eq 1 ]] && add_rule "ad-domain" "domain" "geosite:category-ads-all" "block"
+        [[ "${XRAY_RULES_BT}" -eq 1 ]] && add_rule "bt" "protocol" "bittorrent" "block" 1 "" "defer"
+        [[ "${XRAY_RULES_CN}" -eq 1 ]] && add_rule "cn-ip" "ip" "geoip:cn" "block" "after" "private-ip" "defer"
+        [[ "${XRAY_RULES_AD}" -eq 1 ]] && add_rule "ad-domain" "domain" "geosite:category-ads-all" "block" "" "" "defer"
         ;;
     esac
     # 处理 WARP 状态
