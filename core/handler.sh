@@ -2625,8 +2625,7 @@ function main() {
     --recovery) handler_recovery "$@" ;;             # 备份恢复/导入导出
     --change-domain)
         handler_change_domain "$1" # 处理域名配置
-        handler_xray_config        # 更新 Xray 配置
-        handler_restart            # 重启 Xray
+        handler_xray_config        # 更新 Xray 配置并完成重启验证
         if ! [[ "${CONFIG_DATA['only-change-domain'],,}" == "y" ]]; then
             # 还原 Web 服务
             handler_web "$(echo "${SCRIPT_CONFIG}" | jq -r '.nginx.web')"
@@ -2646,8 +2645,7 @@ function main() {
     --traffic) handler_traffic ;;               # 显示流量统计
     --change-port)
         handler_change_xray_port  # 处理 Xray 端口配置
-        handler_xray_config       # 更新 Xray 配置
-        handler_restart           # 重启 Xray
+        handler_xray_config       # 更新 Xray 配置并完成重启验证
         handler_share             # 显示分享链接
         ;;                        # 修改 Xray 端口
     --start) handler_start ;;     # 启动 Xray
