@@ -579,6 +579,7 @@
     "remote_not_enabled": "Remote subscription is not enabled",
     "remote_backend": "Subscription backend",
     "state_failed": "Failed to save subscription state",
-    "cancelled": "Operation cancelled"
+    "cancelled": "Operation cancelled",
+    "old_backend_cleanup_failed": "The new subscription backend is active, but cleanup of the old backend failed; please inspect it manually"
   }
 }
