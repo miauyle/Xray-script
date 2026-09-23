@@ -55,6 +55,12 @@
 
 ## Changelog
 
+8. v2026.09.23.4 fixes the incorrect coupling between Clash/Mihomo remote subscriptions and Xray SNI mode.
+   1. Compatible Vision, XHTTP, Fallback, and SNI configs can all publish remote subscriptions; `.xray.tag == SNI` is no longer required.
+   2. Subscription hosting is independent from the Xray data path: reuse an existing Nginx HTTPS site when available, otherwise optionally start a lightweight HTTP static subscription service.
+   3. The lightweight HTTP backend serves only the random-token `clash.yaml` path, has no directory listing or web UI, and is managed by systemd.
+   4. The HTTP backend self-tests the local subscription URL after startup; port conflicts or startup failures do not produce an enabled subscription state.
+   5. Plain HTTP is unencrypted and the subscription contains proxy credentials, so the script displays an explicit warning before enabling it.
 7. v2026.09.23.3 adds Clash Verge Rev / Mihomo config and subscription support.
    1. Generates an importable Mihomo YAML from the current Xray config.
    2. Supports Vision+Reality, VLESS+XHTTP+Reality, Fallback, and compatible Reality/XHTTP/TLS-CDN nodes in SNI mode.
@@ -101,12 +107,12 @@ In SNI configuration, CDN share links use H2 as default ALPN. If you need H3, mo
 The main menu now includes `Clash/Mihomo Config & Subscription`:
 
 - `Generate/refresh local YAML`: writes `~/.xray-script/clash/clash.yaml`.
-- `Enable/refresh HTTPS subscription`: SNI + Nginx only; serves a static subscription through the existing Nginx process.
+- `Enable/refresh remote subscription`: independent of the Xray protocol type; reuses an existing Nginx HTTPS site when available, otherwise can start a lightweight HTTP static subscription service.
 - `Show subscription info`: prints the local YAML path and current remote URL.
 - `Rotate subscription URL token`: invalidates the old URL immediately.
-- `Disable HTTPS subscription`: removes the remote endpoint while keeping the local YAML.
+- `Disable remote subscription`: disables the active subscription backend while keeping the local YAML.
 
-Remote URLs look like `https://domain/sub/<random-token>/clash.yaml`. The subscription contains proxy credentials, so treat the URL like a secret and rotate the token if it may have leaked.
+Remote subscription hosting is independent from the Vision/Reality/XHTTP data path. With an existing Nginx HTTPS site, URLs look like `https://domain/sub/<random-token>/clash.yaml`; without reusable HTTPS, the optional lightweight HTTP backend uses `http://server-ip:18080/sub/<random-token>/clash.yaml`. Plain HTTP is unencrypted and the subscription contains proxy credentials, so use it only if you accept that risk and rotate the token if the URL may have leaked.
 
 The generator currently supports Vision+Reality, VLESS+XHTTP+Reality, Fallback, and compatible VLESS nodes in SNI mode. Mihomo does not currently support VLESS+mKCP or Trojan+XHTTP, so those combinations are rejected instead of generating misleading configs.
 
