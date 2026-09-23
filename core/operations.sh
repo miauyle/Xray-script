@@ -353,7 +353,7 @@ function handler_doctor() {
         ((failures++))
     fi
 
-    if systemctl -q is-active xray 2>/dev/null; then
+    if command -v systemctl >/dev/null 2>&1 && systemctl -q is-active xray 2>/dev/null; then
         ops_pass "xray service active"
     else
         ops_fail "xray service inactive"
@@ -371,28 +371,42 @@ function handler_doctor() {
     backup_count="$(list_xray_backups_array | wc -l | tr -d ' ')"
     ops_pass "Xray backups: ${backup_count}"
 
+    if [[ -f "${SCRIPT_CONFIG_PENDING_PATH}" ]]; then
+        ops_warn "pending Xray/script transaction snapshot exists; a previous reconfiguration may have been interrupted"
+        ((warnings++))
+    fi
+
     if [[ "$(echo "${SCRIPT_CONFIG}" | jq -r '.xray.warp // 0')" -eq 1 ]]; then
         local state ip trace
         if ! command -v docker >/dev/null 2>&1; then
             ops_fail "WARP configured but Docker is unavailable"
             ((failures++))
-            echo "Doctor summary: failures=${failures}, warnings=${warnings}"
-            return 0
-        fi
-        state="$(docker inspect -f '{{.State.Status}}' xray-script-warp 2>/dev/null || true)"
-        if [[ "${state}" == 'running' ]]; then
-            ops_pass "WARP container running"
-            ip="$(ops_get_warp_container_ip || true)"
-            trace="$(ops_warp_trace "${ip}" || true)"
-            if [[ -n "${trace}" ]]; then
-                ops_pass "WARP SOCKS egress reachable"
-            else
-                ops_warn "WARP SOCKS egress check failed"
-                ((warnings++))
-            fi
         else
-            ops_fail "WARP configured but container not running"
-            ((failures++))
+            state="$(docker inspect -f '{{.State.Status}}' xray-script-warp 2>/dev/null || true)"
+            if [[ "${state}" == 'running' ]]; then
+                ops_pass "WARP container running"
+                ip="$(ops_get_warp_container_ip || true)"
+                trace="$(ops_warp_trace "${ip}" || true)"
+                if [[ -n "${trace}" ]]; then
+                    ops_pass "WARP SOCKS egress reachable"
+                else
+                    ops_warn "WARP SOCKS egress check failed"
+                    ((warnings++))
+                fi
+            else
+                ops_fail "WARP configured but container not running"
+                ((failures++))
+            fi
+        fi
+
+        if [[ "$(echo "${SCRIPT_CONFIG}" | jq -r '.xray.warp_fallback // 0')" -eq 1 ]]; then
+            if jq -e '.routing.balancers[]? | select(.tag == "warp-fallback" and .fallbackTag == "direct")' "${XRAY_CONFIG_PATH}" >/dev/null 2>&1 &&
+               jq -e '.observatory.subjectSelector[]? | select(. == "warp")' "${XRAY_CONFIG_PATH}" >/dev/null 2>&1; then
+                ops_pass "WARP Direct fallback wiring"
+            else
+                ops_fail "WARP Direct fallback flag/config mismatch"
+                ((failures++))
+            fi
         fi
     fi
 
@@ -406,6 +420,8 @@ function handler_doctor() {
                 ops_warn "Clash HTTP subscription configured but service inactive"
                 ((warnings++))
             fi
+        elif [[ "${backend}" == 'nginx' ]]; then
+            ops_pass "Clash subscription backend: nginx HTTPS"
         fi
     fi
 
