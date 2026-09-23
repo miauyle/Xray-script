@@ -54,6 +54,13 @@
 
 ## 更新日志
 
+13. v2026.09.23.9 补全运维与安全管理功能。
+   1. `apply_xray_config` 完成迁移：校验、自动备份、原子替换，并支持重启失败自动回滚。
+   2. 新增备份列表/恢复、配置导出/导入、Doctor 与 Xray/WARP/Clash 日志查看。
+   3. WARP 新增容器/SOCKS/出口 IP/国家检测，并支持基于 Xray observatory + balancer 的 Direct fallback。
+   4. Routing 扩展为 Direct/WARP/Block 统一管理，新增 Direct IP/Domain，并同步持久化规则状态。
+   5. Direct 出站支持 Auto/IPv4/IPv6；重新生成协议配置时保留 Direct family 与 WARP fallback。
+   6. 主菜单新增“运维与诊断”，集中提供上述能力。
 12. v2026.09.23.8 引入统一 `apply_xray_config` 安全写入入口，并首先迁移 routing 配置修改。
    1. 候选配置先写入与正式配置同目录的临时文件，再由 `xray run -test -format=json` 校验。
    2. 校验通过后自动备份当前配置，并保留正式配置原有的权限和 owner/group。
