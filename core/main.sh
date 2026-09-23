@@ -182,8 +182,7 @@ function processes_web_config() {
         exec_handler '--script-config' 'SNI'  # 设置脚本配置为 SNI
         exec_handler '--install'              # 安装核心组件
         exec_handler '--nginx-install'        # 安装 Nginx
-        exec_handler '--xray-config' "${web}" # 配置 Xray 使用选定的 web 类型
-        exec_handler '--restart'              # 重启 Xray 服务
+        exec_handler '--xray-config' "${web}" # 配置 Xray，并由安全 apply 流程重启验证
         exec_handler '--share'                # 显示分享链接
     fi
 }
@@ -245,8 +244,7 @@ function processes_xray_config() {
         # 对于其他配置类型
         exec_handler '--script-config' "${XTLS_CONFIG}" # 设置脚本配置
         exec_handler '--install'                        # 安装核心组件
-        exec_handler '--xray-config'                    # 配置 Xray
-        exec_handler '--restart'                        # 重启 Xray 服务
+        exec_handler '--xray-config'                    # 配置 Xray，并由安全 apply 流程重启验证
         exec_handler '--share'                          # 显示分享链接
     fi
 }
@@ -377,7 +375,6 @@ function processes_routing() {
         ;;
     *) exit 0 ;;                                    # 其他情况：退出脚本
     esac
-    exec_handler '--restart' # 重启 Xray 服务
 }
 
 function processes_custom_sites() {
@@ -452,6 +449,18 @@ function processes_language() {
     bash "${CUR_DIR}/${CUR_FILE}.sh" && exit 0
 }
 
+function processes_recovery() {
+    exec_menu '--recovery'
+    local choose=$(echo $?)
+    case ${choose} in
+    1) exec_handler '--recovery' 'list' ;;
+    2) exec_handler '--recovery' 'restore' ;;
+    3) exec_handler '--recovery' 'export' ;;
+    4) exec_handler '--recovery' 'import' ;;
+    *) return 0 ;;
+    esac
+}
+
 # =============================================================================
 # 函数名称: processes_config
 # 功能描述: 处理主配置管理相关的流程。
@@ -474,6 +483,7 @@ function processes_config() {
     4) exec_handler '--change-port' ;;  # 选择 4：修改 Xray 端口
     5) exec_handler '--geodata-cron' ;; # 选择 5：配置 GeoData Cron 任务
     6) processes_language ;;            # 选择 6：设置语言
+    7) processes_recovery ;;            # 选择 7：备份恢复/导入导出
     *) exit 0 ;;                        # 其他情况：退出脚本
     esac
 }
