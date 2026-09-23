@@ -66,6 +66,7 @@ readonly GEODATA_PATH="${TOOL_DIR}/geodata.sh"  # GeoData 更新脚本
 readonly XRAY_CONFIG_PATH="/usr/local/etc/xray/config.json"    # Xray 最终配置文件路径
 readonly XRAY_BACKUP_DIR="${SCRIPT_CONFIG_DIR}/backups/xray"    # Xray 配置自动备份目录
 readonly XRAY_BACKUP_KEEP=10                                    # 默认保留最近 10 份
+readonly XRAY_EXPORT_DIR="${SCRIPT_CONFIG_DIR}/exports"          # 配置导出目录
 readonly SCRIPT_CONFIG_PATH="${SCRIPT_CONFIG_DIR}/config.json" # 脚本主配置文件路径
 readonly ACME_PATH="${HOME}/.acme.sh/acme.sh"                  # ACME.sh 脚本路径
 
@@ -77,6 +78,7 @@ declare LANG_PARAM=''                                     # (未在脚本中实�
 declare I18N_DATA=''                                      # 存储从 i18n JSON 文件中读取的全部数据
 # 声明一个关联数组，用于在脚本运行时临时存储用户输入的配置数据
 declare -A CONFIG_DATA # 用于临时存储用户输入的配置数据
+declare LAST_XRAY_BACKUP='' # 最近一次 apply 前创建的备份，用于失败自动回滚
 
 # =============================================================================
 # 函数名称: load_i18n
@@ -599,6 +601,7 @@ function get_custom_site_json_by_index() {
 # 功能描述: 在覆盖正式 Xray 配置前创建时间戳备份，并仅保留最近 N 份。
 # =============================================================================
 function backup_xray_config() {
+    LAST_XRAY_BACKUP=''
     [[ -f "${XRAY_CONFIG_PATH}" ]] || return 0
 
     mkdir -p "${XRAY_BACKUP_DIR}" || _error "Failed to create Xray backup directory"
@@ -621,6 +624,7 @@ function backup_xray_config() {
         rm -f "${temp_backup}"
         _error "Failed to finalize Xray config backup; original config was not modified"
     fi
+    LAST_XRAY_BACKUP="${backup_path}"
 
     local -a backups=()
     local i
@@ -638,18 +642,63 @@ function backup_xray_config() {
 }
 
 # =============================================================================
-# 函数名称: apply_xray_config
-# 功能描述: 统一安全应用候选 Xray 配置。
-#           1. 将 XRAY_CONFIG 写入同目录临时文件。
-#           2. 使用 Xray 自身校验候选配置。
-#           3. 覆盖前自动备份当前正式配置。
-#           4. 使用同文件系统原子 rename 替换正式配置，避免部分写入。
-# 参数:
-#   $1: context - (可选) 调用场景，仅用于错误信息/后续诊断。
+# Xray 安全应用 / 重启 / 自动回滚
 # =============================================================================
+function print_xray_service_diagnostics() {
+    echo -e "${YELLOW}----- xray status -----${NC}" >&2
+    systemctl status xray --no-pager -l >&2 2>/dev/null || true
+    echo -e "${YELLOW}----- recent xray journal -----${NC}" >&2
+    journalctl -u xray -n 40 --no-pager -o cat >&2 2>/dev/null || true
+}
+
+function restart_xray_service_checked() {
+    local attempt
+    if systemctl -q is-active xray; then
+        systemctl restart xray >/dev/null 2>&1 || return 1
+    else
+        systemctl start xray >/dev/null 2>&1 || return 1
+    fi
+
+    systemctl -q is-enabled xray || systemctl enable xray >/dev/null 2>&1 || true
+
+    for attempt in 1 2 3 4 5; do
+        systemctl -q is-active xray && return 0
+        sleep 0.4
+    done
+    return 1
+}
+
+function restore_xray_file_without_backup() {
+    local source_file="$1"
+    local context="${2:-rollback}"
+    local temp_config
+
+    [[ -f "${source_file}" ]] || return 1
+    temp_config="$(mktemp "${XRAY_CONFIG_PATH}.rollback.XXXXXX")" || return 1
+    if ! cp -p "${source_file}" "${temp_config}"; then
+        rm -f "${temp_config}"
+        return 1
+    fi
+    if ! xray run -test -format=json -c "${temp_config}" >/dev/null 2>&1; then
+        rm -f "${temp_config}"
+        return 1
+    fi
+    if [[ -f "${XRAY_CONFIG_PATH}" ]]; then
+        chmod --reference="${XRAY_CONFIG_PATH}" "${temp_config}" >/dev/null 2>&1 || true
+        chown --reference="${XRAY_CONFIG_PATH}" "${temp_config}" >/dev/null 2>&1 || true
+    fi
+    mv -f "${temp_config}" "${XRAY_CONFIG_PATH}" || {
+        rm -f "${temp_config}"
+        return 1
+    }
+    XRAY_CONFIG="$(jq '.' "${XRAY_CONFIG_PATH}")" || return 1
+    return 0
+}
+
 function apply_xray_config() {
     local context="${1:-unspecified}"
-    local temp_config
+    local restart_after="${2:-no}"
+    local temp_config backup_path=''
 
     temp_config="$(mktemp "${XRAY_CONFIG_PATH}.tmp.XXXXXX")" ||
         _error "Failed to create temporary Xray config [${context}]"
@@ -661,31 +710,24 @@ function apply_xray_config() {
 
     if ! xray run -test -format=json -c "${temp_config}" >/dev/null 2>&1; then
         rm -f "${temp_config}"
-        if [[ -f "${XRAY_CONFIG_PATH}" ]]; then
-            XRAY_CONFIG="$(jq '.' "${XRAY_CONFIG_PATH}")"
-        else
-            XRAY_CONFIG=''
-        fi
+        [[ -f "${XRAY_CONFIG_PATH}" ]] && XRAY_CONFIG="$(jq '.' "${XRAY_CONFIG_PATH}")"
         _error "Xray configuration validation failed; original config was kept [${context}]"
     fi
 
-    # 原子替换会换 inode；保留现有正式配置的权限和 owner/group。
-    # 首次创建时沿用 mktemp 的 root:root / 600。
     if [[ -f "${XRAY_CONFIG_PATH}" ]]; then
-        if ! chmod --reference="${XRAY_CONFIG_PATH}" "${temp_config}"; then
+        chmod --reference="${XRAY_CONFIG_PATH}" "${temp_config}" || {
             rm -f "${temp_config}"
             _error "Failed to preserve Xray config permissions [${context}]"
-        fi
-        if ! chown --reference="${XRAY_CONFIG_PATH}" "${temp_config}"; then
+        }
+        chown --reference="${XRAY_CONFIG_PATH}" "${temp_config}" || {
             rm -f "${temp_config}"
             _error "Failed to preserve Xray config ownership [${context}]"
-        fi
+        }
     fi
 
-    # backup_xray_config 内部保证：备份失败时不会继续覆盖正式配置。
     backup_xray_config
+    backup_path="${LAST_XRAY_BACKUP}"
 
-    # temp_config 与正式配置位于同一目录，mv 在同一文件系统内完成原子替换。
     if ! mv -f "${temp_config}" "${XRAY_CONFIG_PATH}"; then
         rm -f "${temp_config}"
         _error "Failed to atomically replace Xray configuration [${context}]"
@@ -693,16 +735,146 @@ function apply_xray_config() {
 
     XRAY_CONFIG="$(jq '.' "${XRAY_CONFIG_PATH}")" ||
         _error "Failed to reload applied Xray configuration [${context}]"
-    sleep 2
+
+    if [[ "${restart_after}" == 'restart' ]]; then
+        if ! restart_xray_service_checked; then
+            print_xray_service_diagnostics
+            if [[ -n "${backup_path}" ]] && restore_xray_file_without_backup "${backup_path}" "rollback:${context}" && restart_xray_service_checked; then
+                _error "Xray restart failed; automatically rolled back to ${backup_path} [${context}]"
+            fi
+            _error "Xray restart failed and automatic rollback could not recover the service [${context}]"
+        fi
+    fi
 }
 
-# =============================================================================
-# 函数名称: persist_xray_config
-# 功能描述: 兼容旧调用点的过渡包装器。
-#           新代码应直接调用 apply_xray_config；其余调用点后续逐步迁移。
-# =============================================================================
-function persist_xray_config() {
-    apply_xray_config "legacy:persist"
+function list_xray_backups() {
+    mkdir -p "${XRAY_BACKUP_DIR}"
+    local -a backups=()
+    mapfile -t backups < <(
+        find "${XRAY_BACKUP_DIR}" -maxdepth 1 -type f -name 'config-*.json' -printf '%T@ %f\n' 2>/dev/null |
+            sort -nr |
+            cut -d' ' -f2-
+    )
+    if ((${#backups[@]} == 0)); then
+        echo "$(echo "$I18N_DATA" | jq -r '.handler.recovery.no_backups')"
+        return 1
+    fi
+    local i
+    for ((i = 0; i < ${#backups[@]}; i++)); do
+        printf '%2d. %s\n' "$((i + 1))" "${backups[${i}]}"
+    done
+}
+
+function handler_restore_xray_backup() {
+    local -a backups=()
+    mapfile -t backups < <(
+        find "${XRAY_BACKUP_DIR}" -maxdepth 1 -type f -name 'config-*.json' -printf '%T@ %f\n' 2>/dev/null |
+            sort -nr |
+            cut -d' ' -f2-
+    )
+    ((${#backups[@]} > 0)) || _error "$(echo "$I18N_DATA" | jq -r '.handler.recovery.no_backups')"
+
+    local i
+    for ((i = 0; i < ${#backups[@]}; i++)); do
+        printf '%2d. %s\n' "$((i + 1))" "${backups[${i}]}"
+    done
+    printf "%s: " "$(echo "$I18N_DATA" | jq -r '.handler.recovery.restore_prompt')" >&2
+
+    local choice
+    read -r choice
+    [[ "${choice}" =~ ^[0-9]+$ ]] || _error "$(echo "$I18N_DATA" | jq -r '.handler.recovery.invalid_choice')"
+    ((choice >= 1 && choice <= ${#backups[@]})) || _error "$(echo "$I18N_DATA" | jq -r '.handler.recovery.invalid_choice')"
+
+    local selected="${XRAY_BACKUP_DIR}/${backups[$((choice - 1))]}"
+    XRAY_CONFIG="$(jq '.' "${selected}")" || _error "$(echo "$I18N_DATA" | jq -r '.handler.recovery.invalid_backup')"
+    apply_xray_config "restore:${backups[$((choice - 1))]}" restart
+    echo -e "${GREEN}[$(echo "$I18N_DATA" | jq -r '.title.info')]${NC} $(echo "$I18N_DATA" | jq -r '.handler.recovery.restore_success')"
+}
+
+function handler_export_config_bundle() {
+    mkdir -p "${XRAY_EXPORT_DIR}"
+    chmod 700 "${XRAY_EXPORT_DIR}"
+    local timestamp workdir output
+    timestamp="$(date '+%Y%m%d-%H%M%S')"
+    workdir="$(mktemp -d)" || _error "Failed to create export workspace"
+    output="${XRAY_EXPORT_DIR}/xray-script-${timestamp}.tar.gz"
+
+    cp -p "${XRAY_CONFIG_PATH}" "${workdir}/xray-config.json" || {
+        rm -rf "${workdir}"
+        _error "Failed to stage Xray config for export"
+    }
+    cp -p "${SCRIPT_CONFIG_PATH}" "${workdir}/script-config.json" || {
+        rm -rf "${workdir}"
+        _error "Failed to stage script config for export"
+    }
+    jq -n --arg version "$(echo "${SCRIPT_CONFIG}" | jq -r '.version // empty')" --arg created "$(date -Iseconds)"         '{format:"xray-script-export-v1",version:$version,created_at:$created}' >"${workdir}/manifest.json"
+
+    tar -C "${workdir}" -czf "${output}" manifest.json xray-config.json script-config.json || {
+        rm -rf "${workdir}" "${output}"
+        _error "Failed to create config export"
+    }
+    chmod 600 "${output}"
+    rm -rf "${workdir}"
+    echo -e "${GREEN}[$(echo "$I18N_DATA" | jq -r '.title.info')]${NC} $(echo "$I18N_DATA" | jq -r '.handler.recovery.export_success'): ${output}"
+}
+
+function handler_import_config_bundle() {
+    printf "%s: " "$(echo "$I18N_DATA" | jq -r '.handler.recovery.import_prompt')" >&2
+    local archive
+    read -r archive
+    archive="${archive/#\~/$HOME}"
+    [[ -f "${archive}" ]] || _error "$(echo "$I18N_DATA" | jq -r '.handler.recovery.import_missing')"
+
+    local workdir
+    workdir="$(mktemp -d)" || _error "Failed to create import workspace"
+    if ! tar -C "${workdir}" -xzf "${archive}" manifest.json xray-config.json script-config.json 2>/dev/null; then
+        rm -rf "${workdir}"
+        _error "$(echo "$I18N_DATA" | jq -r '.handler.recovery.import_invalid')"
+    fi
+    jq -e '.format == "xray-script-export-v1"' "${workdir}/manifest.json" >/dev/null 2>&1 || {
+        rm -rf "${workdir}"
+        _error "$(echo "$I18N_DATA" | jq -r '.handler.recovery.import_invalid')"
+    }
+    jq -e '.' "${workdir}/script-config.json" >/dev/null 2>&1 || {
+        rm -rf "${workdir}"
+        _error "$(echo "$I18N_DATA" | jq -r '.handler.recovery.import_invalid')"
+    }
+    xray run -test -format=json -c "${workdir}/xray-config.json" >/dev/null 2>&1 || {
+        rm -rf "${workdir}"
+        _error "$(echo "$I18N_DATA" | jq -r '.handler.recovery.invalid_backup')"
+    }
+
+    local script_backup
+    script_backup="$(mktemp "${SCRIPT_CONFIG_PATH}.import-bak.XXXXXX")" || {
+        rm -rf "${workdir}"
+        _error "Failed to back up script config before import"
+    }
+    cp -p "${SCRIPT_CONFIG_PATH}" "${script_backup}" || {
+        rm -rf "${workdir}" "${script_backup}"
+        _error "Failed to back up script config before import"
+    }
+
+    XRAY_CONFIG="$(jq '.' "${workdir}/xray-config.json")"
+    apply_xray_config "import:$(basename "${archive}")" restart
+    if ! cp -p "${workdir}/script-config.json" "${SCRIPT_CONFIG_PATH}"; then
+        [[ -n "${LAST_XRAY_BACKUP}" ]] && restore_xray_file_without_backup "${LAST_XRAY_BACKUP}" "import-script-rollback" && restart_xray_service_checked || true
+        cp -p "${script_backup}" "${SCRIPT_CONFIG_PATH}" >/dev/null 2>&1 || true
+        rm -rf "${workdir}" "${script_backup}"
+        _error "Failed to apply imported script config; Xray rollback was attempted"
+    fi
+    SCRIPT_CONFIG="$(jq '.' "${SCRIPT_CONFIG_PATH}")"
+    rm -rf "${workdir}" "${script_backup}"
+    echo -e "${GREEN}[$(echo "$I18N_DATA" | jq -r '.title.info')]${NC} $(echo "$I18N_DATA" | jq -r '.handler.recovery.import_success')"
+}
+
+function handler_recovery() {
+    case "$1" in
+    list) list_xray_backups ;;
+    restore) handler_restore_xray_backup ;;
+    export) handler_export_config_bundle ;;
+    import) handler_import_config_bundle ;;
+    *) _error "Unsupported recovery action: $1" ;;
+    esac
 }
 
 # =============================================================================
@@ -743,6 +915,7 @@ function add_rule() {
     local outboundTag=$4 # 获取出站标签
     local position=$5    # 获取插入位置参数
     local target_tag=$6  # 获取目标规则标签参数
+    local restart_after="${7:-no}"
     # 如果 XRAY_CONFIG 未初始化，则从文件加载
     XRAY_CONFIG="${XRAY_CONFIG:-$(jq '.' "${XRAY_CONFIG_PATH}")}"
     # 检查是否存在具有相同 ruleTag 的规则
@@ -796,7 +969,7 @@ function add_rule() {
         fi
     fi
     # Routing 已迁移到新的统一安全写入入口。
-    apply_xray_config "routing:add:${rule_tag}"
+    apply_xray_config "routing:add:${rule_tag}" "${restart_after}"
 }
 
 # =============================================================================
@@ -825,7 +998,7 @@ function handler_routing() {
     # 调用 exec_read 读取用户输入的规则值
     exec_read "${rule_tag}"
     # 调用 add_rule 将规则添加到 Xray 配置中
-    add_rule "${rule_tag}" "${rule_target}" "${CONFIG_DATA[${rule_tag}]}" "${rule_type}"
+    add_rule "${rule_tag}" "${rule_target}" "${CONFIG_DATA[${rule_tag}]}" "${rule_type}" '' '' restart
 }
 
 function routing_rule_field() {
@@ -918,8 +1091,7 @@ function handler_routing_rule_delete() {
         )
     ')"
 
-    apply_xray_config "routing:delete:${rule_tag}"
-    handler_restart
+    apply_xray_config "routing:delete:${rule_tag}" restart
     echo -e "${GREEN}[$(echo "$I18N_DATA" | jq -r '.title.info')]${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.routing.deleted")"
 }
 
@@ -950,8 +1122,7 @@ function handler_routing_rule_clear() {
         XRAY_CONFIG="$(echo "${XRAY_CONFIG}" | jq --arg ruleTag "${rule_tag}" '
             .routing.rules |= map(select(.ruleTag != $ruleTag))
         ')"
-        apply_xray_config "routing:clear:${rule_tag}"
-        handler_restart
+        apply_xray_config "routing:clear:${rule_tag}" restart
         echo -e "${GREEN}[$(echo "$I18N_DATA" | jq -r '.title.info')]${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.routing.cleared")"
         ;;
     *)
@@ -1320,7 +1491,7 @@ function handler_xray_config() {
     # 更新脚本配置中的路由规则
     SCRIPT_CONFIG="$(echo "${SCRIPT_CONFIG}" | jq --argjson rules "${XRAY_RULES}" '.rules = $rules')"
     # 统一执行 Xray 配置校验、自动备份和安全写入；成功后再保存脚本配置。
-    persist_xray_config
+    apply_xray_config "xray:regenerate"
     echo "${SCRIPT_CONFIG}" >"${SCRIPT_CONFIG_PATH}" && sleep 2
 }
 
@@ -1808,10 +1979,10 @@ function handler_stop() {
 # 返回值: 无 (通过 systemctl 命令执行操作)
 # =============================================================================
 function handler_restart() {
-    # 检查 Xray 服务是否活跃，如果活跃则重启，否则启动
-    systemctl -q is-active xray && systemctl -q restart xray || systemctl -q start xray
-    # 检查 Xray 服务是否已启用，如果未启用则启用
-    systemctl -q is-enabled xray || systemctl -q enable xray
+    if ! restart_xray_service_checked; then
+        print_xray_service_diagnostics
+        _error "Failed to restart Xray service"
+    fi
 }
 
 # =============================================================================
@@ -1934,8 +2105,8 @@ function handler_warp() {
     fi
     # 更新脚本配置中的 WARP 状态
     SCRIPT_CONFIG=$(echo "${SCRIPT_CONFIG}" | jq --arg warp "${WARP_STATUS}" '.xray.warp = $warp')
-    # 统一执行 Xray 配置校验、自动备份和安全写入；成功后再保存脚本配置。
-    persist_xray_config
+    # WARP 配置使用统一安全写入并立即验证 Xray 服务。
+    apply_xray_config "warp:toggle" restart
     echo "${SCRIPT_CONFIG}" >"${SCRIPT_CONFIG_PATH}" && sleep 2
 }
 
@@ -1950,22 +2121,25 @@ function handler_warp() {
 # 返回值: 无 (通过调用其他函数和脚本执行操作)
 # =============================================================================
 function handler_reset_warp() {
-    # 确保 Docker 已安装
     handler_docker
-    # 从脚本配置中读取当前 WARP 状态
     local WARP_STATUS="$(echo "${SCRIPT_CONFIG}" | jq -r '.xray.warp')"
-    # 从 Xray 配置文件加载配置
-    XRAY_CONFIG="$(jq '.' "${XRAY_CONFIG_PATH}")"
-    # 如果 WARP 已启用 (状态为 1)
-    if [[ ${WARP_STATUS} -eq 1 ]]; then
-        # 清空 WARP 容器日志数据
-        exec_docker '--clean-container-logs'
-        # 调用 docker.sh 禁用 WARP 容器
-        exec_docker '--disable-warp'
-        # 调用 docker.sh 构建并启用 WARP 容器
-        exec_docker '--build-warp'
-        exec_docker '--enable-warp'
-    fi
+    [[ "${WARP_STATUS}" -eq 1 ]] || return 0
+
+    XRAY_CONFIG="$(jq '.' "${XRAY_CONFIG_PATH}")" || _error "Failed to read Xray configuration"
+    exec_docker '--clean-container-logs'
+    exec_docker '--disable-warp'
+    exec_docker '--build-warp'
+    local container_ip="$(exec_docker '--enable-warp')"
+    [[ -n "${container_ip}" ]] || _error "Failed to obtain WARP container IP after reset"
+
+    XRAY_CONFIG="$(echo "${XRAY_CONFIG}" | jq --arg address "${container_ip}" '
+        .outbounds |= map(
+            if .tag == "warp" then
+                .settings.servers[0].address = $address
+            else . end
+        )
+    ')"
+    apply_xray_config "warp:reset" restart
 }
 
 # =============================================================================
@@ -2435,6 +2609,7 @@ function main() {
     --sni-ports) handler_check_sni_ports ;;
     --routing) handler_routing "$@" ;; # 处理路由规则
     --routing-manage) handler_routing_manage "$@" ;; # 管理已有路由规则
+    --recovery) handler_recovery "$@" ;;             # 备份恢复/导入导出
     --change-domain)
         handler_change_domain "$1" # 处理域名配置
         handler_xray_config        # 更新 Xray 配置
