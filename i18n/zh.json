@@ -169,7 +169,7 @@
       "option4": "更换订阅 URL Token",
       "option5": "关闭远程订阅",
       "info1": "从当前 Xray 配置生成 Clash Verge Rev / Mihomo 可用 YAML",
-      "info2": "优先复用现有 Nginx HTTPS；没有 Nginx/域名时可启用轻量 HTTP 订阅服务",
+      "info2": "优先复用现有 Nginx HTTPS；否则可启用轻量 HTTP 订阅服务，默认端口 80，也可自定义",
       "info3": "显示本地 YAML 路径和当前远程订阅 URL",
       "info4": "生成新的随机 Token，旧订阅 URL 立即失效",
       "info5": "关闭当前远程订阅后端，保留本地 YAML"
@@ -581,6 +581,8 @@
     "state_failed": "保存订阅状态失败",
     "cancelled": "操作已取消",
     "old_backend_cleanup_failed": "新订阅后端已启用，但旧订阅后端清理失败，请手动检查",
-    "http_firewall_hint": "如果外部无法访问订阅，请确认 VPS/云安全组已放行该 TCP 端口"
+    "http_firewall_hint": "如果外部无法访问订阅，请确认 VPS/云安全组已放行该 TCP 端口",
+    "http_port_prompt": "请输入 HTTP 订阅端口，直接回车使用默认端口",
+    "http_port_invalid": "HTTP 订阅端口无效，请输入 1-65535"
   }
 }
