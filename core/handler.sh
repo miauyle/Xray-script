@@ -2014,7 +2014,8 @@ function handler_warp() {
     XRAY_CONFIG="$(jq '.' "${XRAY_CONFIG_PATH}")" || _error "Failed to read Xray configuration"
 
     if [[ ${WARP_STATUS} -eq 1 ]]; then
-        exec_docker '--disable-warp'
+        # 先生成并安全应用“不依赖 WARP”的候选配置。
+        # 成功切换 Xray 后再删除容器，确保 apply 失败时旧 WARP 仍可用于 rollback。
         XRAY_CONFIG="$(echo "${XRAY_CONFIG}" | jq '
             .outbounds |= map(select(.tag != "warp"))
             | .routing.rules |= map(select(.outboundTag != "warp" and .balancerTag != "warp-fallback"))
@@ -2026,19 +2027,25 @@ function handler_warp() {
               else . end
         ')"
         SCRIPT_CONFIG="$(echo "${SCRIPT_CONFIG}" | jq '.xray.warp = 0 | .xray.warp_fallback = 0')"
+        SCRIPT_CONFIG="$(echo "${SCRIPT_CONFIG}" | jq --argjson rules "$(echo "${XRAY_CONFIG}" | jq '.routing.rules // []')" '.rules = $rules')"
+
+        apply_xray_config "warp:disable" "restart"
+        persist_script_config
+        exec_docker '--disable-warp'
     else
         exec_docker '--build-warp'
         local container_ip="$(exec_docker '--enable-warp')"
         [[ -n "${container_ip}" ]] || _error "Failed to obtain WARP container IP"
+
         local socks_config='[{"tag":"warp","protocol":"socks","settings":{"servers":[{"address":"'${container_ip}'","port":40001}]}}]'
         XRAY_CONFIG="$(echo "${XRAY_CONFIG}" | jq --argjson socks_config "${socks_config}" '
             .outbounds = ((.outbounds // []) | map(select(.tag != "warp"))) + $socks_config
         ')"
         SCRIPT_CONFIG="$(echo "${SCRIPT_CONFIG}" | jq '.xray.warp = 1 | .xray.warp_fallback = (.xray.warp_fallback // 0)')"
-    fi
 
-    apply_xray_config "warp:toggle" "restart"
-    persist_script_config
+        apply_xray_config "warp:enable" "restart"
+        persist_script_config
+    fi
 }
 # =============================================================================
 # 函数名称: handler_reset_warp
