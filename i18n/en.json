@@ -580,6 +580,7 @@
     "remote_backend": "Subscription backend",
     "state_failed": "Failed to save subscription state",
     "cancelled": "Operation cancelled",
-    "old_backend_cleanup_failed": "The new subscription backend is active, but cleanup of the old backend failed; please inspect it manually"
+    "old_backend_cleanup_failed": "The new subscription backend is active, but cleanup of the old backend failed; please inspect it manually",
+    "http_firewall_hint": "If the subscription is unreachable externally, make sure this TCP port is allowed by the VPS/cloud firewall"
   }
 }
