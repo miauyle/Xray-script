@@ -566,7 +566,7 @@
     "domain_missing": "SNI domain is empty; cannot build an HTTPS subscription URL",
     "nginx_update_failed": "Failed to update Nginx site config",
     "nginx_validation_failed": "Nginx config validation failed; subscription config was not loaded",
-    "remote_disabled": "Clash/Mihomo HTTPS remote subscription disabled",
+    "remote_disabled": "Clash/Mihomo remote subscription disabled",
     "local_file": "Local YAML",
     "remote_url": "Remote subscription URL",
     "disabled": "disabled",
