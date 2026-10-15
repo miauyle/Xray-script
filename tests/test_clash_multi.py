@@ -10,6 +10,9 @@ from pathlib import Path
 from http.server import ThreadingHTTPServer
 
 ROOT = Path(__file__).resolve().parents[1]
+# Runtime starts core/clash_http_server.py directly, which puts core on sys.path.
+import sys
+sys.path.insert(0, str(ROOT / "core"))
 
 
 def load(name, path):
