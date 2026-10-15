@@ -20,6 +20,7 @@ class Handler(BaseHTTPRequestHandler):
             (self.server.token_file, self.server.yaml_file, "clash.yaml"),
             (self.server.multi_token_file, self.server.multi_yaml_file, "multi_clash.yaml"),
             (self.server.provider_token_file, self.server.provider_yaml_file, "proxies.yaml"),
+            (self.server.provider_next_token_file, self.server.provider_yaml_file, "proxies.yaml"),
         ]
         selected_file = None
         for token_file, yaml_file, filename in routes:
@@ -61,6 +62,7 @@ def main():
     parser.add_argument("--multi-yaml-file", type=pathlib.Path)
     parser.add_argument("--provider-token-file", type=pathlib.Path)
     parser.add_argument("--provider-yaml-file", type=pathlib.Path)
+    parser.add_argument("--provider-next-token-file", type=pathlib.Path)
     args = parser.parse_args()
 
     server = ThreadingHTTPServer((args.bind, args.port), Handler)
@@ -69,6 +71,7 @@ def main():
     server.multi_token_file = args.multi_token_file
     server.multi_yaml_file = args.multi_yaml_file
     server.provider_token_file = args.provider_token_file
+    server.provider_next_token_file = args.provider_next_token_file
     server.provider_yaml_file = args.provider_yaml_file
     server.serve_forever()
 
