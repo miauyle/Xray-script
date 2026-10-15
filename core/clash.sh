@@ -513,6 +513,18 @@ location = /sub/${multi_token}/multi_clash.yaml {
 }
 EOF_NGINX
             fi
+            if [[ -n "$multi_token" ]]; then
+                cat <<EOF_NGINX
+location = /sub/${multi_token}/multi_nodes.txt {
+    alias ${SHADOWROCKET_NODES_PATH};
+    default_type text/plain;
+    charset utf-8;
+    access_log off;
+    add_header Cache-Control "no-store" always;
+    add_header X-Content-Type-Options "nosniff" always;
+}
+EOF_NGINX
+            fi
             for token in "$provider_token" "$next_token"; do
                 if [[ -n "$token" ]]; then
                     cat <<EOF_NGINX
@@ -643,7 +655,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=${python_bin} ${CLASH_HTTP_SERVER_PATH} --bind 0.0.0.0 --port ${port} --token-file ${CLASH_TOKEN_PATH} --yaml-file ${CLASH_CONFIG_PATH} --multi-token-file ${MULTI_TOKEN_PATH} --multi-yaml-file ${MULTI_YAML_PATH} --provider-token-file ${PROVIDER_TOKEN_PATH} --provider-next-token-file ${PROVIDER_NEXT_TOKEN_PATH} --provider-yaml-file ${PROVIDER_YAML_PATH}
+ExecStart=${python_bin} ${CLASH_HTTP_SERVER_PATH} --bind 0.0.0.0 --port ${port} --token-file ${CLASH_TOKEN_PATH} --yaml-file ${CLASH_CONFIG_PATH} --multi-token-file ${MULTI_TOKEN_PATH} --multi-yaml-file ${MULTI_YAML_PATH} --provider-token-file ${PROVIDER_TOKEN_PATH} --provider-next-token-file ${PROVIDER_NEXT_TOKEN_PATH} --provider-yaml-file ${PROVIDER_YAML_PATH} --shadowrocket-config-file ${MULTI_CONFIG_PATH} --shadowrocket-cache-dir ${SHADOWROCKET_CACHE_DIR}
 Restart=on-failure
 RestartSec=2
 NoNewPrivileges=true
