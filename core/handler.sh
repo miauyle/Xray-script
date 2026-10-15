@@ -1348,7 +1348,7 @@ function handler_x25519_config() {
     # 提取 Hash32
     local HASH32="$(echo "${X25519}" | awk -F, '{print $3}')"
     # 输出显示 x25519 密钥对
-    echo -e "${GREEN}[Private Key]${NC} "${PRIVATE_KEY}"" >&2
+    # Do not echo the Reality private key to the terminal or captured setup logs.
     echo -e "${GREEN}[Public Key]${NC} "${PUBLIC_KEY}"" >&2
     echo -e "${GREEN}[Hash32]${NC} "${HASH32}"" >&2
     # 更新脚本配置中的私钥和公钥，以及哈希值
@@ -1515,7 +1515,11 @@ function handler_xray_config() {
     *) apply_xray_config "xray:regenerate" ;;
     esac
     persist_script_config
-    [[ "${pending_guard}" -eq 1 ]] && trap - EXIT
+    if [[ "${pending_guard}" -eq 1 ]]; then
+        trap - EXIT
+    fi
+    # The optional EXIT-trap cleanup must not determine the operation result.
+    return 0
 }
 
 # =============================================================================

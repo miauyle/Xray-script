@@ -55,6 +55,11 @@
 
 ## Changelog
 
+17. v2026.10.15.2 fixes false failures reported after successful Xray config generation.
+   1. Explicitly return success from `handler_xray_config` when there is no pending script-state snapshot; the optional EXIT-trap cleanup must not cause a nonzero result.
+   2. Stop printing Reality Private Keys to installation logs.
+   3. Add regression tests for fresh installation and pending snapshot handling.
+
 16. v2026.10.15.1 adds optional TCP BBR management and updates the version previously missed when multi-VPS subscriptions were introduced.
    1. Add optional BBR + fq status/enable/restore under Operations & Diagnostics.
    2. Check kernel support, avoid kernel upgrades and Xray restarts, and persist only in Xray-script's own `/etc/sysctl.d/99-xray-script-bbr.conf` drop-in.
