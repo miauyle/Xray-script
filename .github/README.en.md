@@ -55,6 +55,9 @@
 
 ## Changelog
 
+18. v2026.10.15.3 adds a single Shadowrocket subscription URL for all VPS peers: reuse the existing peer list and MULTI_TOKEN, export Base64 VLESS Reality/XHTTP links, retain last-known-good remote nodes, and refresh Nginx snapshots with a five-minute one-shot timer.
+
+
 17. v2026.10.15.2 fixes false failures reported after successful Xray config generation.
    1. Explicitly return success from `handler_xray_config` when there is no pending script-state snapshot; the optional EXIT-trap cleanup must not cause a nonzero result.
    2. Stop printing Reality Private Keys to installation logs.
