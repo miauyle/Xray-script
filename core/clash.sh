@@ -482,10 +482,12 @@ function ensure_site_include() {
 }
 
 function write_nginx_subscription_config() {
-    local token="$1"
+    local token="$1" multi_token provider_token next_token
     mkdir -p "$(dirname "${NGINX_SUB_CONFIG}")"
-    cat >"${NGINX_SUB_CONFIG}" <<EOF_NGINX
-# Managed by Xray-script. The tokenized path is a secret because the YAML contains proxy credentials.
+    {
+        echo '# Managed by Xray-script. Subscription URLs contain credentials.'
+        if [[ -n "$token" ]]; then
+            cat <<EOF_NGINX
 location = /sub/${token}/clash.yaml {
     alias ${CLASH_CONFIG_PATH};
     default_type text/yaml;
@@ -495,6 +497,37 @@ location = /sub/${token}/clash.yaml {
     add_header X-Content-Type-Options "nosniff" always;
 }
 EOF_NGINX
+        fi
+        if multi_is_enabled; then
+            multi_token="$(multi_read_token "${MULTI_TOKEN_PATH}")"
+            provider_token="$(multi_read_token "${PROVIDER_TOKEN_PATH}")"
+            next_token="$(multi_read_token "${PROVIDER_NEXT_TOKEN_PATH}")"
+            if [[ -n "$multi_token" ]]; then
+                cat <<EOF_NGINX
+location = /sub/${multi_token}/multi_clash.yaml {
+    alias ${MULTI_YAML_PATH};
+    default_type text/yaml;
+    access_log off;
+    add_header Cache-Control "no-store" always;
+    add_header X-Content-Type-Options "nosniff" always;
+}
+EOF_NGINX
+            fi
+            for token in "$provider_token" "$next_token"; do
+                if [[ -n "$token" ]]; then
+                    cat <<EOF_NGINX
+location = /sub/${token}/proxies.yaml {
+    alias ${PROVIDER_YAML_PATH};
+    default_type text/yaml;
+    access_log off;
+    add_header Cache-Control "no-store" always;
+    add_header X-Content-Type-Options "nosniff" always;
+}
+EOF_NGINX
+                fi
+            done
+        fi
+    } >"${NGINX_SUB_CONFIG}"
 }
 
 function restore_nginx_file() {
