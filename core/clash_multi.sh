@@ -7,6 +7,11 @@ readonly MULTI_TOKEN_PATH="${CLASH_DIR}/multi_subscription.token"
 readonly PROVIDER_TOKEN_PATH="${CLASH_DIR}/provider.token"
 readonly PROVIDER_NEXT_TOKEN_PATH="${CLASH_DIR}/provider.token.next"
 readonly MULTI_HELPER="${CUR_DIR}/clash_multi.py"
+readonly SHADOWROCKET_HELPER="${CUR_DIR}/clash_shadowrocket.py"
+readonly SHADOWROCKET_NODES_PATH="${CLASH_DIR}/multi_nodes.txt"
+readonly SHADOWROCKET_CACHE_DIR="${CLASH_DIR}/provider-cache"
+readonly SHADOWROCKET_REFRESH_SERVICE="/etc/systemd/system/xray-shadowrocket-refresh.service"
+readonly SHADOWROCKET_REFRESH_TIMER="/etc/systemd/system/xray-shadowrocket-refresh.timer"
 
 function multi_is_enabled() {
     [[ -s "${MULTI_CONFIG_PATH}" ]] && jq -e '.enabled == true' "${MULTI_CONFIG_PATH}" >/dev/null 2>&1
@@ -28,8 +33,63 @@ function multi_generate_files() {
     command -v python3 >/dev/null 2>&1 || return 1
     python3 "${MULTI_HELPER}" --config "${MULTI_CONFIG_PATH}" generate \
         --single "${CLASH_CONFIG_PATH}" --provider "${PROVIDER_YAML_PATH}" \
-        --multi "${MULTI_YAML_PATH}"
+        --multi "${MULTI_YAML_PATH}" || return 1
+    # A Shadowrocket subscription is another *view* of the same peer list.
+    # Remote outages use the last validated Provider cache; local nodes
+    # are always included. Failures must not overwrite previous output.
+    python3 "${SHADOWROCKET_HELPER}" --config "${MULTI_CONFIG_PATH}" \
+        --local "${PROVIDER_YAML_PATH}" --cache-dir "${SHADOWROCKET_CACHE_DIR}" \
+        --output "${SHADOWROCKET_NODES_PATH}"
 }
+
+# Nginx serves an on-disk snapshot. A short systemd timer refreshes it
+# without requiring an additional long-lived daemon. Python HTTP renders
+# subscriptions on demand and does not need the timer.
+function shadowrocket_stop_refresh_timer() {
+    if [[ -f "${SHADOWROCKET_REFRESH_TIMER}" ]]; then
+        systemctl disable --now xray-shadowrocket-refresh.timer >/dev/null 2>&1 || true
+        rm -f "${SHADOWROCKET_REFRESH_TIMER}"
+    fi
+    if [[ -f "${SHADOWROCKET_REFRESH_SERVICE}" ]]; then
+        rm -f "${SHADOWROCKET_REFRESH_SERVICE}"
+    fi
+    systemctl daemon-reload >/dev/null 2>&1 || true
+}
+
+function shadowrocket_configure_refresh_timer() {
+    if ! multi_is_enabled; then
+        shadowrocket_stop_refresh_timer
+        return 0
+    fi
+    local python_bin
+    python_bin="$(command -v python3)" || return 1
+    cat >"${SHADOWROCKET_REFRESH_SERVICE}" <<EOF_SERVICE
+[Unit]
+Description=Refresh Shadowrocket multi-server node subscription
+
+[Service]
+Type=oneshot
+ExecStart=${python_bin} ${SHADOWROCKET_HELPER} --config ${MULTI_CONFIG_PATH} --local ${PROVIDER_YAML_PATH} --cache-dir ${SHADOWROCKET_CACHE_DIR} --output ${SHADOWROCKET_NODES_PATH}
+NoNewPrivileges=true
+PrivateTmp=true
+EOF_SERVICE
+    cat >"${SHADOWROCKET_REFRESH_TIMER}" <<'EOF_TIMER'
+[Unit]
+Description=Refresh Shadowrocket multi-server subscription every 5 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+Persistent=true
+Unit=xray-shadowrocket-refresh.service
+
+[Install]
+WantedBy=timers.target
+EOF_TIMER
+    systemctl daemon-reload || return 1
+    systemctl enable --now xray-shadowrocket-refresh.timer >/dev/null 2>&1
+}
+
 
 function multi_refresh_publication() {
     local backend port
@@ -38,6 +98,7 @@ function multi_refresh_publication() {
     case "$backend" in
     nginx)
         publish_nginx_subscription "$(current_token)" || return 1
+        shadowrocket_configure_refresh_timer || return 1
         ;;
     http)
         port="$(state_value port)"
@@ -46,6 +107,8 @@ function multi_refresh_publication() {
         systemctl daemon-reload || return 1
         systemctl restart xray-clash-subscription || return 1
         systemctl -q is-active xray-clash-subscription || return 1
+        # HTTP requests rebuild the aggregate on demand.
+        shadowrocket_stop_refresh_timer
         ;;
     *) return 1 ;;
     esac
@@ -115,6 +178,7 @@ function multi_show() {
     if ! multi_is_enabled; then return 0; fi
     token="$(multi_read_token "${MULTI_TOKEN_PATH}")"
     [[ -n "$token" ]] && printf 'Multi subscription: %s\n' "$(multi_url "$token" multi_clash.yaml)"
+    [[ -n "$token" ]] && printf 'Shadowrocket subscription: %s\n' "$(multi_url "$token" multi_nodes.txt)"
     token="$(multi_read_token "${PROVIDER_TOKEN_PATH}")"
     [[ -n "$token" ]] && printf 'Provider URL (share with peers only): %s\n' "$(multi_url "$token" proxies.yaml)"
     token="$(multi_read_token "${PROVIDER_NEXT_TOKEN_PATH}")"
@@ -168,7 +232,7 @@ function multi_disable() {
         fail "Could not update subscription backend; previous configuration restored"
     fi
     rm -f "${MULTI_TOKEN_PATH}" "${PROVIDER_TOKEN_PATH}" "${PROVIDER_NEXT_TOKEN_PATH}"
-    rm -f "${MULTI_YAML_PATH}" "${PROVIDER_YAML_PATH}"
+    rm -f "${MULTI_YAML_PATH}" "${PROVIDER_YAML_PATH}" "${SHADOWROCKET_NODES_PATH}"
     if [[ ! -s "${CLASH_TOKEN_PATH}" ]]; then
         case "$(state_value backend 2>/dev/null)" in
         http) disable_http_subscription ;;
