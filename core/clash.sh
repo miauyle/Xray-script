@@ -643,7 +643,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=${python_bin} ${CLASH_HTTP_SERVER_PATH} --bind 0.0.0.0 --port ${port} --token-file ${CLASH_TOKEN_PATH} --yaml-file ${CLASH_CONFIG_PATH}
+ExecStart=${python_bin} ${CLASH_HTTP_SERVER_PATH} --bind 0.0.0.0 --port ${port} --token-file ${CLASH_TOKEN_PATH} --yaml-file ${CLASH_CONFIG_PATH} --multi-token-file ${MULTI_TOKEN_PATH} --multi-yaml-file ${MULTI_YAML_PATH} --provider-token-file ${PROVIDER_TOKEN_PATH} --provider-next-token-file ${PROVIDER_NEXT_TOKEN_PATH} --provider-yaml-file ${PROVIDER_YAML_PATH}
 Restart=on-failure
 RestartSec=2
 NoNewPrivileges=true
@@ -907,6 +907,16 @@ function rotate_remote() {
 function disable_remote() {
     local backend rc
     backend="$(state_value backend 2>/dev/null || true)"
+    if multi_is_enabled; then
+        # The backend is shared; disabling the legacy URL must not stop peer URLs.
+        if [[ "${backend}" == nginx ]]; then
+            publish_nginx_subscription '' || fail "$(msg nginx_update_failed)"
+        fi
+        rm -f "${CLASH_TOKEN_PATH}"
+        info "$(msg remote_disabled)"
+        multi_show
+        return 0
+    fi
 
     case "${backend}" in
     nginx)
@@ -954,11 +964,19 @@ function main() {
     case "${1:-show}" in
     generate) generate_yaml ;;
     enable) enable_remote ;;
+    multi-enable) multi_enable ;;
+    multi-add) multi_add "${@:2}" ;;
+    multi-remove) multi_remove "${@:2}" ;;
+    multi-show) multi_show ;;
+    multi-disable) multi_disable ;;
+    multi-rotate) multi_rotate "${2:-}" ;;
     rotate) rotate_remote ;;
     disable) disable_remote ;;
     show) show_info ;;
     *) fail "$(msg unsupported_action): ${1}" ;;
     esac
 }
+
+source "${CUR_DIR}/clash_multi.sh"
 
 main "$@"
