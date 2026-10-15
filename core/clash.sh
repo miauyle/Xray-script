@@ -388,6 +388,9 @@ EOF_YAML
 
     mv -f "${temp_file}" "${CLASH_CONFIG_PATH}"
     chmod 600 "${CLASH_CONFIG_PATH}"
+    if multi_is_enabled; then
+        multi_generate_files || fail "Could not regenerate multi-server subscriptions"
+    fi
     xray_reality_compat_warning
     info "$(msg generated): ${CLASH_CONFIG_PATH}"
 }
