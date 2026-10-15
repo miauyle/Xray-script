@@ -189,7 +189,8 @@
       "option5": "Restore Xray backup",
       "option6": "Export config bundle",
       "option7": "Import config bundle",
-      "option8": "Direct IPv4/IPv6 policy"
+      "option8": "Direct IPv4/IPv6 policy",
+      "option9": "TCP BBR network tuning"
     },
     "direct_family": {
       "title": "Direct egress IP family"
@@ -204,6 +205,12 @@
       "option6": "Stage a new Provider token (old URL still works)",
       "option7": "Finalize Provider token rotation (after updating peers)",
       "option8": "Disable multi-server subscriptions (keep single)"
+    },
+    "bbr": {
+      "title": "TCP BBR network tuning",
+      "option1": "Show TCP congestion control status",
+      "option2": "Enable persistent BBR + fq",
+      "option3": "Restore the previous TCP settings"
     }
   },
   "handler": {
@@ -618,5 +625,24 @@
     "http_port_prompt": "Enter the HTTP subscription port; press Enter to use the default",
     "http_port_invalid": "Invalid HTTP subscription port; enter a value from 1 to 65535",
     "http_self_test_failed": "The lightweight HTTP subscription service started, but the local subscription self-test failed; systemd/journal diagnostics were printed above"
+  },
+  "bbr": {
+    "root_required": "Root privileges are required to manage BBR",
+    "unsupported": "This kernel does not support TCP BBR; no settings were changed",
+    "conflict": "Unrecognized managed BBR file or missing backup; refusing to overwrite existing settings",
+    "orphaned": "Original BBR backup exists without a managed drop-in; refusing to overwrite it",
+    "invalid": "Original sysctl values are invalid; no changes made",
+    "failed": "Failed to enable BBR + fq; attempted to restore original runtime settings",
+    "restore_failed": "Failed to restore original TCP settings; attempted to reinstate BBR",
+    "existing": "Existing Xray-script BBR configuration verified and reapplied",
+    "enabled": "BBR + fq enabled persistently; no reboot required",
+    "restored": "Original TCP congestion control and qdisc restored; managed BBR drop-in removed",
+    "not_managed": "No BBR configuration managed by Xray-script was found",
+    "cc": "Current TCP congestion control",
+    "qdisc": "Current default qdisc",
+    "available": "Available TCP congestion controls",
+    "persistent": "BBR persistence managed by Xray-script",
+    "active": "BBR + fq is active",
+    "inactive": "BBR + fq is not fully active"
   }
 }
