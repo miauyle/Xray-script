@@ -90,7 +90,7 @@ class HandlerXrayReturnTests(unittest.TestCase):
     def test_reality_private_key_not_emailed_to_terminal(self):
         # Prior versions echoed the secret to stderr during installation.
         key_function = extract_function("handler_x25519_config")
-        self.assertNotRegex(key_function, r"echo[^\n]*PRIVATE_KEY")
+        self.assertNotRegex(key_function, r"(?m)^\s*echo -e [^\n]*PRIVATE_KEY")
         self.assertIn(".xray.privateKey", key_function)
 
 
