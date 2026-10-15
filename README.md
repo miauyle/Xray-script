@@ -54,6 +54,9 @@
 
 ## 更新日志
 
+18. v2026.10.15.3 新增 Shadowrocket 单链接多 VPS 订阅：复用现有 Provider、MULTI_TOKEN，输出 `multi_nodes.txt`，自动转换 VLESS Reality/XHTTP，并通过缓存保留暂时不可用的远程节点。HTTP 动态聚合，Nginx 使用 5 分钟一次的 systemd 定时快照，无额外常驻聚合进程。
+
+
 17. v2026.10.15.2 修复安装和重新生成 Xray 配置后误报“操作执行失败”的问题。
    1. 修复 `handler_xray_config` 在没有待恢复状态快照时，因最后一条条件语句返回 1 而误报失败；成功完成配置写入后明确返回 0。
    2. 不再在安装日志中打印 Reality Private Key，避免终端记录泄露服务器私钥。
