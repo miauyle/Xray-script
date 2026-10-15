@@ -271,7 +271,7 @@ def aggregate(config_path, local_provider_path, cache_dir, fetcher=None, now=Non
         lines.append(make_uri(node, label))
     if not lines:
         raise ProviderError("No valid local nodes")
-    return base64.b64encode(("\n".join(lines) + "\n").encode("utf-8")) + b"\n"
+    return base64.b64encode(("\n".join(lines) + "\n").encode("utf-8"))
 
 
 def main():
