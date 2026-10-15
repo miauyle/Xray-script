@@ -55,6 +55,13 @@
 
 ## Changelog
 
+16. v2026.10.15.1 adds optional TCP BBR management and updates the version previously missed when multi-VPS subscriptions were introduced.
+   1. Add optional BBR + fq status/enable/restore under Operations & Diagnostics.
+   2. Check kernel support, avoid kernel upgrades and Xray restarts, and persist only in Xray-script's own `/etc/sysctl.d/99-xray-script-bbr.conf` drop-in.
+   3. Save original congestion control and qdisc, attempt rollback on failure and safely restore the original values.
+   4. Include the equal-peer `multi_clash.yaml`, Mihomo Proxy Providers, and scoped tokens delivered in PR #15 in the version notes, with BBR regression tests.
+
+
 15. v2026.09.23.11 fixes WARP health checks accidentally bypassing the configured proxy.
    1. Fix `ops_warp_trace` using `--noproxy '*'`, which disabled the explicit SOCKS proxy and incorrectly reported the VPS direct egress.
    2. Use `--noproxy \"\"` plus explicit `socks5h://<container>:40001` so WARP is forced even when `NO_PROXY` exists in the environment.
@@ -191,6 +198,15 @@ Main-menu item **11. Operations & Diagnostics** provides the maintenance tools i
 - **Backup restore** keeps 10 automatic Xray backups by default. New backups also pair the script state; legacy Xray-only backups remain restorable.
 - **Export/import** bundles script + Xray config into a mode-`600` `tar.gz`. WARP container networking is host-local, so after moving to another VPS run Doctor/WARP reset to reconfirm it.
 - **Direct egress family** selects Auto / IPv4 / IPv6 through Xray Freedom `sockopt.domainStrategy`.
+- **TCP BBR** optionally displays the current state, enables persistent BBR + fq, or restores original settings without changing Xray.
+
+### TCP BBR (optional)
+
+Choose **11. Operations & Diagnostics → 9. TCP BBR network tuning** to inspect, enable, or restore settings. It is **not enabled automatically** during Xray installation or updates.
+
+The script checks kernel availability, optionally tries `modprobe tcp_bbr` (without installing a kernel), and sets TCP BBR plus the `fq` default qdisc. Only `/etc/sysctl.d/99-xray-script-bbr.conf` is written, and previous runtime values are backed up to `~/.xray-script/network/bbr-original.conf`. Other sysctl configuration files remain untouched. It refuses to overwrite an unrecognized drop-in or operate without a valid original-value backup.
+
+CLI: `bash core/handler.sh --bbr status|enable|restore` (from the installed repository; root is required to enable or restore). BBR does not guarantee faster routes or fix physical packet loss. Other sysctl drop-ins can still override these values at boot.
 
 ### Safe apply and automatic rollback
 

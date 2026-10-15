@@ -54,6 +54,13 @@
 
 ## 更新日志
 
+16. v2026.10.15.1 增加可选 TCP BBR 网络优化，并补上此前多 VPS Mihomo 订阅功能遗漏的版本号更新。
+   1. 在“运维与诊断”中新增 TCP BBR：查看状态、一键开启并持久化 BBR + fq、恢复启用前的内核参数。
+   2. 自动检查当前内核是否支持 BBR；不强制升级内核，不重启 Xray，也不覆盖既有 sysctl 配置文件。脚本只管理专属的 `/etc/sysctl.d/99-xray-script-bbr.conf`。
+   3. 开启前保存原来的 TCP 拥塞控制算法和默认队列调度器；失败时尝试回滚，恢复时只删除脚本创建的配置。
+   4. 同时将上一轮 PR #15 的对等多 VPS `multi_clash.yaml`、Proxy Providers 和独立 Token 功能记录在当前版本中，并增加 BBR 回归测试。
+
+
 15. v2026.09.23.11 修复 WARP 健康检查误绕过代理的问题。
    1. 修复 `ops_warp_trace` 使用 `--noproxy '*'` 导致 curl 完全绕过 SOCKS、错误显示 Oracle/VPS 直连出口的问题。
    2. 改为 `--noproxy \"\"` + 显式 `socks5h://<container>:40001`，确保即使系统存在 `NO_PROXY` 环境变量也强制走 WARP SOCKS。
@@ -229,6 +236,15 @@ bash core/clash.sh multi-disable
 - **备份恢复**：Xray 正式配置修改前自动备份，默认保留 10 份。新备份同时保存脚本状态；旧版仅 Xray 的备份仍可恢复。
 - **导出/导入**：将脚本配置和 Xray 配置打包为权限 `600` 的 `tar.gz`，用于手工迁移或额外留档。WARP 容器网络属于机器本地状态，迁移到其他 VPS 后建议运行 Doctor/WARP reset 重新确认。
 - **Direct 出口 family**：可选 Auto / IPv4 / IPv6，对 Freedom outbound 使用 Xray `sockopt.domainStrategy`。
+- **TCP BBR 网络优化**：可选状态查看、开启 BBR + fq、恢复原参数。采用专属 `sysctl.d` 文件持久化；不自动开启、不升级内核、不修改 Xray 配置。
+
+### TCP BBR（可选）
+
+从主菜单进入 **11. 运维与诊断 → 9. TCP BBR 网络优化**，可选择检查状态、开启或恢复原有设置。默认保持系统原样，不会在 Xray 安装或更新时自动开启。
+
+开启前会先读取 `net.ipv4.tcp_available_congestion_control`，必要时尝试 `modprobe tcp_bbr`，不安装新内核。支持时立即应用 `net.ipv4.tcp_congestion_control=bbr` 与 `net.core.default_qdisc=fq`，并创建 **仅由脚本管理** 的 `/etc/sysctl.d/99-xray-script-bbr.conf`；原值保存在 `~/.xray-script/network/bbr-original.conf`。重新开启不会覆盖原始备份，恢复操作会撤销这个文件并尽量恢复启用前的运行时值。
+
+可选 CLI：`bash core/handler.sh --bbr status|enable|restore`（需在已安装的项目根目录执行，启用/恢复需要 root）。如果目标 sysctl 文件已存在但不是脚本创建的，或者备份缺失，脚本会拒绝覆盖。BBR 仅作用于 Linux TCP 拥塞控制，**不保证加速，也不解决线路绕路或高丢包问题**。注意系统其他独立的 sysctl 配置仍可能在启动时覆盖这些参数。
 
 ### 安全写入与自动回滚
 

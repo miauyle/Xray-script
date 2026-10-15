@@ -492,6 +492,17 @@ function processes_direct_family() {
     esac
 }
 
+function processes_bbr() {
+    exec_menu '--bbr'
+    local choose=$(echo $?)
+    case ${choose} in
+    1) exec_handler '--bbr' 'status' ;;
+    2) exec_handler '--bbr' 'enable' ;;
+    3) exec_handler '--bbr' 'restore' ;;
+    *) return 0 ;;
+    esac
+}
+
 function processes_operations() {
     exec_menu '--operations'
     local choose=$(echo $?)
@@ -504,6 +515,7 @@ function processes_operations() {
     6) exec_handler '--export-config' ;;
     7) exec_handler '--import-config' ;;
     8) processes_direct_family ;;
+    9) processes_bbr ;;
     *) return 0 ;;
     esac
 }

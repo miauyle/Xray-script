@@ -189,7 +189,8 @@
       "option5": "恢复 Xray 自动备份",
       "option6": "导出配置包",
       "option7": "导入配置包",
-      "option8": "Direct IPv4/IPv6 出口策略"
+      "option8": "Direct IPv4/IPv6 出口策略",
+      "option9": "TCP BBR 网络优化"
     },
     "direct_family": {
       "title": "Direct 出口 IP family"
@@ -204,6 +205,12 @@
       "option6": "预生成新的 Provider Token（旧 Token 暂时有效）",
       "option7": "确认 Provider Token 轮换（其他 VPS 更新后再执行）",
       "option8": "关闭多机订阅（保留单机订阅）"
+    },
+    "bbr": {
+      "title": "TCP BBR 网络优化",
+      "option1": "查看 TCP 拥塞控制状态",
+      "option2": "开启 BBR + fq（持久化）",
+      "option3": "恢复启用前的 TCP 设置"
     }
   },
   "handler": {
@@ -618,5 +625,24 @@
     "http_port_prompt": "请输入 HTTP 订阅端口，直接回车使用默认端口",
     "http_port_invalid": "HTTP 订阅端口无效，请输入 1-65535",
     "http_self_test_failed": "轻量 HTTP 订阅服务已启动，但本机订阅自检失败；上方已输出 systemd/journal 诊断信息"
+  },
+  "bbr": {
+    "root_required": "修改 BBR 需要 root 权限",
+    "unsupported": "当前内核不支持 TCP BBR，未修改任何配置",
+    "conflict": "BBR 配置文件不受脚本管理或备份缺失，为避免覆盖已有设置已取消操作",
+    "orphaned": "发现孤立的 BBR 备份文件，请人工检查，避免覆盖旧值",
+    "invalid": "原有 sysctl 参数格式不合法，未修改配置",
+    "failed": "设置 BBR + fq 失败，已尝试恢复原来的运行时设置",
+    "restore_failed": "恢复原网络参数失败，已尝试重新保留 BBR 配置",
+    "existing": "已有脚本管理的 BBR 配置，已验证并重新应用",
+    "enabled": "BBR + fq 已启用并持久化，无需重启系统",
+    "restored": "已恢复原来的 TCP 拥塞控制与队列调度参数，并删除脚本管理的 BBR 配置",
+    "not_managed": "当前没有由 Xray-script 管理的 BBR 配置",
+    "cc": "当前 TCP 拥塞控制算法",
+    "qdisc": "当前默认队列调度器",
+    "available": "内核支持的拥塞控制算法",
+    "persistent": "由脚本持久化管理 BBR",
+    "active": "BBR + fq 当前已生效",
+    "inactive": "BBR + fq 尚未完全生效"
   }
 }

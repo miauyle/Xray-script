@@ -2596,6 +2596,7 @@ function handler_quick_install() {
 
 # 运维扩展依赖本文件中已经定义的 apply/backup/WARP helper。
 source "${OPERATIONS_PATH}"
+source "${CUR_DIR}/bbr.sh"
 
 # =============================================================================
 # 函数名称: main
@@ -2656,6 +2657,7 @@ function main() {
     --reset-warp) handler_reset_warp ;;         # 重置 WARP
     --traffic) handler_traffic ;;               # 显示流量统计
     --doctor) handler_doctor ;;
+    --bbr) bbr_main "${1:-status}" ;;
     --logs) handler_logs ;;
     --warp-status) handler_warp_status ;;
     --warp-fallback) handler_warp_fallback ;;
