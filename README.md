@@ -178,6 +178,21 @@ SNI 配置中，CDN 的分享链接 Alpn 默认为 H2，如有 H3 需求，请�
 
 当前生成器支持 Vision+Reality、VLESS+XHTTP+Reality、Fallback 与 SNI 中的兼容 VLESS 节点。Mihomo 当前不支持 VLESS+mKCP 和 Trojan+XHTTP，脚本不会为这两类组合生成伪兼容配置。
 
+### Shadowrocket 单链接多 VPS 订阅
+
+在已有 **多服务器订阅管理** 中启用多机、添加其他 VPS 的 Provider URL 后，菜单“查看多机及 Provider 订阅信息”会同时显示：
+
+- `multi_clash.yaml`：原有 Clash Verge Rev / Mihomo 配置，**不变**。
+- `multi_nodes.txt`：**Shadowrocket 专用聚合订阅**，一个 URL 导入所有可用 VPS 的 VLESS 节点。与 Mihomo 订阅**共用 MULTI_TOKEN**，不增加任何服务器清单或新 Token。
+
+无需在 Shadowrocket 中为每台 VPS 单独创建订阅。通过 iPhone Shadowrocket 的「添加 → 类型：Subscribe / 订阅」，填写 `multi_nodes.txt` 完整地址即可。该订阅返回 Base64 编码的逐行 `vless://` 节点链接，兼容 TCP/Vision Reality、XHTTP Reality，以及原生成器支持的 TLS/XHTTP/CDN 节点。需使用支持相应 XHTTP 模式的较新 Shadowrocket 版本；手机端连通性仍应实际验证。
+
+**实现和故障处理**：数据由原来的 `multi-server.json` 和各 VPS `proxies.yaml` 自动汇总，不另设管理菜单或分支配置。Python HTTP 在订阅请求时并发刷新远程 Provider（5 分钟内使用缓存）；远程抓取失败或内容无效时继续提供上次成功缓存的节点，本机节点始终直接包含。首次拉取时某台远端不可用，则只显示已有缓存和本机节点。删除某台 VPS 或更换其 Provider URL 后不再读取旧缓存。
+
+如果复用现有 **Nginx HTTPS**，则输出静态 `multi_nodes.txt` 并通过 systemd **每 5 分钟执行一次性刷新任务**（没有新增常驻服务）。如果使用原来的 Python HTTP 服务，则不需要刷新定时器。多机关闭后会停止相应定时器。所有缓存保存在权限受限的 `~/.xray-script/clash/provider-cache/`。
+
+**注意**：Shadowrocket 返回的是节点订阅，不会继承 Mihomo 的 `Auto`/`Failover`/`Balance` 代理组。Shadowrocket 自身的自动切换/策略需在客户端设置。任一 VPS 离线后，其他节点仍然存在，但如果作为**订阅入口**的那台 VPS 离线，应手动改用另一台 VPS 的完整 `multi_nodes.txt` URL。HTTP 明文传输包含节点和 Provider 凭据，应尽可能使用 HTTPS。
+
 ### 多 VPS 对等订阅（可选，Mihomo Proxy Providers）
 
 现有 `clash.yaml` 单机订阅、Token 和 Xray 入站不变。每台 VPS 都可以独立发布：
