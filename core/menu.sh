@@ -473,6 +473,15 @@ function menu_operations() {
     echo -e "${GREEN}6.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.operations.option6")"
     echo -e "${GREEN}7.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.operations.option7")"
     echo -e "${GREEN}8.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.operations.option8")"
+    echo -e "${GREEN}9.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.operations.option9")"
+    echo -e "------------------------------------------------------"
+}
+
+function menu_bbr() {
+    echo -e "------------------ $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.bbr.title") ------------------"
+    echo -e "${GREEN}1.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.bbr.option1")"
+    echo -e "${GREEN}2.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.bbr.option2")"
+    echo -e "${GREEN}3.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.bbr.option3")"
     echo -e "------------------------------------------------------"
 }
 
@@ -611,6 +620,7 @@ function main() {
     --clash) menu_clash_subscription >&2 ;;
     --clash-multi) menu_clash_multi >&2 ;;
     --operations) menu_operations >&2 ;;
+    --bbr) menu_bbr >&2 ;;
     --direct-family) menu_direct_family >&2 ;;
     --banner) print_banner >&2 ;;         # 显示 Banner
     --status) print_status >&2 ;;         # 显示状态信息
