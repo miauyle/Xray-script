@@ -192,6 +192,19 @@ Before replacing the live Xray configuration, the script automatically saves the
 A backup creation or permission failure aborts the config change. Failure to prune an older backup only emits a warning.
 
 
+## One Shadowrocket subscription for all VPS peers
+
+With multi-server mode enabled, the same existing peer list (`multi-server.json`) now publishes two formats under the **same multi-server token**:
+
+- `/sub/<MULTI_TOKEN>/multi_clash.yaml` — the unchanged Mihomo Proxy Providers configuration.
+- `/sub/<MULTI_TOKEN>/multi_nodes.txt` — a Base64-encoded, newline-separated `vless://` subscription for Shadowrocket.
+
+Import the **single `multi_nodes.txt` URL** in Shadowrocket as a subscription. No separate server lists, credentials or menu are needed. Local nodes always appear, and remote VPS nodes are loaded from their existing `proxies.yaml` endpoints. Successful remote results are cached for five minutes; failed refreshes preserve the last validated snapshot. Removed peers and changed Provider URLs do not reuse old caches.
+
+The existing Python subscription server aggregates on demand; Nginx HTTPS deployments serve a locally generated snapshot refreshed with a five-minute systemd **one-shot timer** (no additional resident daemon). The timer is removed when multi-server subscriptions are disabled. The output supports generated VLESS TCP/Vision REALITY, XHTTP REALITY and TLS/XHTTP nodes, subject to the installed Shadowrocket version's transport support. Client-side validation is still necessary.
+
+This is a **node subscription**, not an export of Mihomo Auto/Failover/Balance groups; configure node selection in Shadowrocket. HTTP remains plaintext and reveals proxy credentials. If the serving VPS is offline, switch to the other VPS's complete subscription URL, including its own multi token.
+
 ## Operations & Diagnostics
 
 Main-menu item **11. Operations & Diagnostics** provides the maintenance tools in one place:
