@@ -444,12 +444,22 @@ function menu_clash_subscription() {
     echo -e "${GREEN}3.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.clash_subscription.option3")"
     echo -e "${GREEN}4.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.clash_subscription.option4")"
     echo -e "${GREEN}5.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.clash_subscription.option5")"
+    echo -e "${GREEN}6.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.clash_subscription.option6")"
     echo -e "------------------------------------------------------"
     echo -e "1. $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.clash_subscription.info1")"
     echo -e "2. $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.clash_subscription.info2")"
     echo -e "3. $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.clash_subscription.info3")"
     echo -e "4. $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.clash_subscription.info4")"
     echo -e "5. $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.clash_subscription.info5")"
+    echo -e "------------------------------------------------------"
+}
+
+function menu_clash_multi() {
+    echo -e "------------------ $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.clash_multi.title") ------------------"
+    local i
+    for i in 1 2 3 4 5 6 7 8; do
+        echo -e "${GREEN}${i}.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.clash_multi.option${i}")"
+    done
     echo -e "------------------------------------------------------"
 }
 
@@ -599,6 +609,7 @@ function main() {
     --sni) menu_sni_config >&2 ;;         # 显示 SNI 配置菜单
     --custom-sites) menu_custom_sites >&2 ;;
     --clash) menu_clash_subscription >&2 ;;
+    --clash-multi) menu_clash_multi >&2 ;;
     --operations) menu_operations >&2 ;;
     --direct-family) menu_direct_family >&2 ;;
     --banner) print_banner >&2 ;;         # 显示 Banner

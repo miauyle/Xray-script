@@ -388,6 +388,9 @@ EOF_YAML
 
     mv -f "${temp_file}" "${CLASH_CONFIG_PATH}"
     chmod 600 "${CLASH_CONFIG_PATH}"
+    if multi_is_enabled; then
+        multi_generate_files || fail "Could not regenerate multi-server subscriptions"
+    fi
     xray_reality_compat_warning
     info "$(msg generated): ${CLASH_CONFIG_PATH}"
 }
@@ -479,10 +482,12 @@ function ensure_site_include() {
 }
 
 function write_nginx_subscription_config() {
-    local token="$1"
+    local token="$1" multi_token provider_token next_token
     mkdir -p "$(dirname "${NGINX_SUB_CONFIG}")"
-    cat >"${NGINX_SUB_CONFIG}" <<EOF_NGINX
-# Managed by Xray-script. The tokenized path is a secret because the YAML contains proxy credentials.
+    {
+        echo '# Managed by Xray-script. Subscription URLs contain credentials.'
+        if [[ -n "$token" ]]; then
+            cat <<EOF_NGINX
 location = /sub/${token}/clash.yaml {
     alias ${CLASH_CONFIG_PATH};
     default_type text/yaml;
@@ -492,6 +497,37 @@ location = /sub/${token}/clash.yaml {
     add_header X-Content-Type-Options "nosniff" always;
 }
 EOF_NGINX
+        fi
+        if multi_is_enabled; then
+            multi_token="$(multi_read_token "${MULTI_TOKEN_PATH}")"
+            provider_token="$(multi_read_token "${PROVIDER_TOKEN_PATH}")"
+            next_token="$(multi_read_token "${PROVIDER_NEXT_TOKEN_PATH}")"
+            if [[ -n "$multi_token" ]]; then
+                cat <<EOF_NGINX
+location = /sub/${multi_token}/multi_clash.yaml {
+    alias ${MULTI_YAML_PATH};
+    default_type text/yaml;
+    access_log off;
+    add_header Cache-Control "no-store" always;
+    add_header X-Content-Type-Options "nosniff" always;
+}
+EOF_NGINX
+            fi
+            for token in "$provider_token" "$next_token"; do
+                if [[ -n "$token" ]]; then
+                    cat <<EOF_NGINX
+location = /sub/${token}/proxies.yaml {
+    alias ${PROVIDER_YAML_PATH};
+    default_type text/yaml;
+    access_log off;
+    add_header Cache-Control "no-store" always;
+    add_header X-Content-Type-Options "nosniff" always;
+}
+EOF_NGINX
+                fi
+            done
+        fi
+    } >"${NGINX_SUB_CONFIG}"
 }
 
 function restore_nginx_file() {
@@ -607,7 +643,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=${python_bin} ${CLASH_HTTP_SERVER_PATH} --bind 0.0.0.0 --port ${port} --token-file ${CLASH_TOKEN_PATH} --yaml-file ${CLASH_CONFIG_PATH}
+ExecStart=${python_bin} ${CLASH_HTTP_SERVER_PATH} --bind 0.0.0.0 --port ${port} --token-file ${CLASH_TOKEN_PATH} --yaml-file ${CLASH_CONFIG_PATH} --multi-token-file ${MULTI_TOKEN_PATH} --multi-yaml-file ${MULTI_YAML_PATH} --provider-token-file ${PROVIDER_TOKEN_PATH} --provider-next-token-file ${PROVIDER_NEXT_TOKEN_PATH} --provider-yaml-file ${PROVIDER_YAML_PATH}
 Restart=on-failure
 RestartSec=2
 NoNewPrivileges=true
@@ -871,6 +907,16 @@ function rotate_remote() {
 function disable_remote() {
     local backend rc
     backend="$(state_value backend 2>/dev/null || true)"
+    if multi_is_enabled; then
+        # The backend is shared; disabling the legacy URL must not stop peer URLs.
+        if [[ "${backend}" == nginx ]]; then
+            publish_nginx_subscription '' || fail "$(msg nginx_update_failed)"
+        fi
+        rm -f "${CLASH_TOKEN_PATH}"
+        info "$(msg remote_disabled)"
+        multi_show
+        return 0
+    fi
 
     case "${backend}" in
     nginx)
@@ -918,11 +964,19 @@ function main() {
     case "${1:-show}" in
     generate) generate_yaml ;;
     enable) enable_remote ;;
+    multi-enable) multi_enable ;;
+    multi-add) multi_add "${@:2}" ;;
+    multi-remove) multi_remove "${@:2}" ;;
+    multi-show) multi_show ;;
+    multi-disable) multi_disable ;;
+    multi-rotate) multi_rotate "${2:-}" ;;
     rotate) rotate_remote ;;
     disable) disable_remote ;;
     show) show_info ;;
     *) fail "$(msg unsupported_action): ${1}" ;;
     esac
 }
+
+source "${CUR_DIR}/clash_multi.sh"
 
 main "$@"

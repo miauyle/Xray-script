@@ -15,14 +15,27 @@ class Handler(BaseHTTPRequestHandler):
     server_version = "XrayClashSubscription/1.0"
 
     def do_GET(self):
-        token = read_token(self.server.token_file)
-        expected = f"/sub/{token}/clash.yaml" if token else ""
-        if not expected or self.path.split("?", 1)[0] != expected:
+        request_path = self.path.split("?", 1)[0]
+        routes = [
+            (self.server.token_file, self.server.yaml_file, "clash.yaml"),
+            (self.server.multi_token_file, self.server.multi_yaml_file, "multi_clash.yaml"),
+            (self.server.provider_token_file, self.server.provider_yaml_file, "proxies.yaml"),
+            (self.server.provider_next_token_file, self.server.provider_yaml_file, "proxies.yaml"),
+        ]
+        selected_file = None
+        for token_file, yaml_file, filename in routes:
+            if token_file is None or yaml_file is None:
+                continue
+            token = read_token(token_file)
+            if token and request_path == f"/sub/{token}/{filename}":
+                selected_file = yaml_file
+                break
+        if selected_file is None:
             self.send_error(404)
             return
 
         try:
-            data = self.server.yaml_file.read_bytes()
+            data = selected_file.read_bytes()
         except OSError:
             self.send_error(404)
             return
@@ -45,11 +58,21 @@ def main():
     parser.add_argument("--port", type=int, required=True)
     parser.add_argument("--token-file", type=pathlib.Path, required=True)
     parser.add_argument("--yaml-file", type=pathlib.Path, required=True)
+    parser.add_argument("--multi-token-file", type=pathlib.Path)
+    parser.add_argument("--multi-yaml-file", type=pathlib.Path)
+    parser.add_argument("--provider-token-file", type=pathlib.Path)
+    parser.add_argument("--provider-yaml-file", type=pathlib.Path)
+    parser.add_argument("--provider-next-token-file", type=pathlib.Path)
     args = parser.parse_args()
 
     server = ThreadingHTTPServer((args.bind, args.port), Handler)
     server.token_file = args.token_file
     server.yaml_file = args.yaml_file
+    server.multi_token_file = args.multi_token_file
+    server.multi_yaml_file = args.multi_yaml_file
+    server.provider_token_file = args.provider_token_file
+    server.provider_next_token_file = args.provider_next_token_file
+    server.provider_yaml_file = args.provider_yaml_file
     server.serve_forever()
 
 
