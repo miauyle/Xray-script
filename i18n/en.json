@@ -177,7 +177,8 @@
       "info2": "Prefer an existing Nginx HTTPS site; otherwise enable the lightweight HTTP server on port 80 by default or choose another port",
       "info3": "Show the local YAML path and current remote subscription URL",
       "info4": "Generate a new random token so the old subscription URL stops working",
-      "info5": "Disable the active remote backend while keeping the local YAML"
+      "info5": "Disable the legacy single-server URL only; multi/provider endpoints remain active",
+      "option6": "Multi-server subscriptions (Proxy Providers)"
     },
     "operations": {
       "title": "Operations & Diagnostics",
@@ -192,6 +193,17 @@
     },
     "direct_family": {
       "title": "Direct egress IP family"
+    },
+    "clash_multi": {
+      "title": "Multi-server Clash/Mihomo subscription",
+      "option1": "Enable/refresh multi and Provider subscriptions (enable single URL first)",
+      "option2": "Add or update a remote VPS Provider URL",
+      "option3": "Remove a remote VPS",
+      "option4": "Show multi and Provider subscription details",
+      "option5": "Rotate this VPS's multi-server token",
+      "option6": "Stage a new Provider token (old URL still works)",
+      "option7": "Finalize Provider token rotation (after updating peers)",
+      "option8": "Disable multi-server subscriptions (keep single)"
     }
   },
   "handler": {
