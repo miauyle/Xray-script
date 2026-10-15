@@ -24,6 +24,7 @@ jobs:
           bash -n core/read.sh
           bash -n core/operations.sh
           bash -n core/clash.sh
+          bash -n core/clash_multi.sh
           bash -n service/docker.sh
 
       - name: JSON syntax
@@ -34,4 +35,7 @@ jobs:
           for file in config/xray/*.json; do jq empty "$file"; done
 
       - name: Python syntax
-        run: python3 -m py_compile core/clash_http_server.py
+        run: python3 -m py_compile core/clash_http_server.py core/clash_multi.py tests/test_clash_multi.py
+
+      - name: Multi-server subscription regression tests
+        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
