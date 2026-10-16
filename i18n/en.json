@@ -204,7 +204,8 @@
       "option5": "Rotate this VPS's multi-server token",
       "option6": "Stage a new Provider token (old URL still works)",
       "option7": "Finalize Provider token rotation (after updating peers)",
-      "option8": "Disable multi-server subscriptions (keep single)"
+      "option8": "Disable multi-server subscriptions (keep single)",
+      "option9": "Diagnose remote Providers and Xray credential consistency"
     },
     "bbr": {
       "title": "TCP BBR network tuning",
