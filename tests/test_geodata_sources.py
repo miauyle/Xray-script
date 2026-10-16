@@ -29,21 +29,21 @@ class GeodataSourceTests(unittest.TestCase):
         # The aggregate must not replace the top-level geox-url block or
         # accidentally replace upstream .dat databases with ruleset files.
         original = (clash_multi.PROXY_MARKER +
-                    "  - name: 'Vision-Reality'\\n" +
-                    "    type: vless\\n" +
-                    "    server: 198.51.100.10\\n" +
-                    "    port: 443\\n")
+                    "  - name: 'Vision-Reality'\n" +
+                    "    type: vless\n" +
+                    "    server: 198.51.100.10\n" +
+                    "    port: 443\n")
         header = (
-            "geodata-mode: true\\n"
-            "geox-url:\\n"
-            '  geoip: "' + OFFICIAL + 'geoip.dat"\\n' +
-            '  geosite: "' + OFFICIAL + 'geosite.dat"\\n'
+            "geodata-mode: true\n"
+            "geox-url:\n"
+            '  geoip: "' + OFFICIAL + 'geoip.dat"\n' +
+            '  geosite: "' + OFFICIAL + 'geosite.dat"\n'
         )
         single = (
             header + original + clash_multi.GROUP_MARKER +
-            "  - name: Proxy\\n    type: select\\n" +
+            "  - name: Proxy\n    type: select\n" +
             clash_multi.RULE_MARKER +
-            "  - GEOSITE,CN,DIRECT\\n"
+            "  - GEOSITE,CN,DIRECT\n"
         )
         provider, multi = clash_multi.render_files(single, [])
         self.assertEqual(multi.count(OFFICIAL + "geoip.dat"), 1)
