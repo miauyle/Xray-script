@@ -55,6 +55,9 @@
 
 ## Changelog
 
+21. v2026.10.16.3 switches generated Clash/Mihomo `geox-url` GeoSite and GeoIP sources from the optional testingcf.jsdelivr.net mirror to official MetaCubeX GitHub Release assets. This avoids relying on a CDN mirror that may deliver non-protobuf content in some networks. The error `invalid GeoSite database file: proto: cannot parse invalid wire-format data` may also require deleting a previously corrupted client cache. This does not change Xray nodes; update the subscription before retrying. GitHub reachability varies by network.
+
+
 20. v2026.10.16.2 adds consented local IPv4 firewall port checks before Xray/HTTP listeners, opt-in conntrack_max runtime + boot persistence, and separate managed swap files (1–32 GiB). Oracle Security List/NSG cloud ingress still requires separate configuration. Includes mocked integration tests.
 
 ### Oracle Ubuntu host management
