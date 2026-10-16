@@ -172,6 +172,17 @@ function multi_url() {
     fi
 }
 
+# Checks remote Provider reachability from THIS VPS and that published local
+# credentials match the current Xray configuration. Never prints tokens.
+function multi_doctor() {
+    multi_is_enabled || fail "Enable the multi-server subscription first."
+    python3 "${SHADOWROCKET_HELPER}" \
+        --config "${MULTI_CONFIG_PATH}" --local "${PROVIDER_YAML_PATH}" \
+        --cache-dir "${SHADOWROCKET_CACHE_DIR}" \
+        --single "${CLASH_CONFIG_PATH}" \
+        --xray "${XRAY_CONFIG_PATH}" --script "${SCRIPT_CONFIG_PATH}" --diagnose
+}
+
 function multi_show() {
     local token
     python3 "${MULTI_HELPER}" --config "${MULTI_CONFIG_PATH}" show || return 1
