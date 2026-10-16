@@ -18,11 +18,14 @@ import time
 from urllib import request
 from urllib.parse import quote, urlencode
 
-from clash_multi import load_config, validate_peer
+from clash_multi import load_config, validate_peer, render_files
 
 MAX_PROVIDER_BYTES = 256 * 1024
 MAX_NODES_PER_PROVIDER = 64
 CACHE_TTL_SECONDS = 300
+# Do not keep serving indefinitely outdated REALITY keys or UUIDs after
+# remote Xray reconfiguration / lost Provider access.
+MAX_STALE_SECONDS = 12 * 3600
 PEER_TIMEOUT_SECONDS = 5
 MAX_FETCH_WORKERS = 8
 SUPPORTED_MODES = {"auto", "stream-one", "stream-up", "packet-up"}
@@ -223,9 +226,10 @@ def cached_peer(peer, cache_dir, fetcher=None, now=None):
     try:
         cached = cache.read_text(encoding="utf-8")
         nodes = parse_provider(cached)
+        age = max(0, now - cache.stat().st_mtime)
     except (OSError, UnicodeError, ProviderError):
-        cached, nodes = None, None
-    if nodes is not None and now - cache.stat().st_mtime < CACHE_TTL_SECONDS:
+        cached, nodes, age = None, None, float("inf")
+    if nodes is not None and age < CACHE_TTL_SECONDS:
         return nodes
     try:
         if fetcher is None:
@@ -245,7 +249,7 @@ def cached_peer(peer, cache_dir, fetcher=None, now=None):
     except Exception:
         # Never publish corrupted/partially fetched data or discard last good
         # nodes during an outage. Not logging URLs keeps Provider tokens private.
-        return nodes or []
+        return nodes if nodes is not None and age <= MAX_STALE_SECONDS else []
 
 
 def aggregate(config_path, local_provider_path, cache_dir, fetcher=None, now=None):
@@ -274,14 +278,107 @@ def aggregate(config_path, local_provider_path, cache_dir, fetcher=None, now=Non
     return base64.b64encode(("\n".join(lines) + "\n").encode("utf-8"))
 
 
+def inspect_publications(config_path, local_provider_path, cache_dir, single=None, xray=None, script=None,
+                         fetcher=None):
+    """Safe, read-only diagnostics (aside from normal cache refresh).
+
+    Prints only peer labels, counts and statuses. Never print Provider URLs,
+    tokens, UUIDs, REALITY keys or full exception text.
+    """
+    config = load_config(config_path)
+    print("Multi-server enabled:", config["enabled"])
+    if not config["enabled"]:
+        print("WARN: enable multi-server subscriptions first")
+        return False
+    try:
+        local = parse_provider(local_provider_path.read_text(encoding="utf-8"))
+    except (OSError, ProviderError) as exc:
+        print("FAIL: local Provider missing or invalid:", type(exc).__name__)
+        return False
+    print("Local Provider nodes:", len(local))
+    healthy = True
+    if single is not None and single.exists():
+        try:
+            expected, _ = render_files(single.read_text(encoding="utf-8"), [])
+            if expected != local_provider_path.read_text(encoding="utf-8"):
+                print("FAIL: local proxies.yaml differs from the single-server clash.yaml")
+                healthy = False
+            else:
+                print("PASS: local Provider matches standalone clash.yaml")
+        except (OSError, ValueError):
+            print("WARN: cannot compare local Provider and clash.yaml")
+            healthy = False
+    if xray is not None and script is not None and xray.exists() and script.exists():
+        try:
+            xray_json = json.loads(xray.read_text(encoding="utf-8"))
+            script_json = json.loads(script.read_text(encoding="utf-8"))
+            active_uuids = {
+                client["id"]
+                for inbound in xray_json.get("inbounds", [])
+                for client in inbound.get("settings", {}).get("clients", [])
+                if isinstance(client.get("id"), str)
+            }
+            pubkey = script_json.get("xray", {}).get("publicKey", "")
+            bad = [node["name"] for node in local
+                   if node["uuid"] not in active_uuids or (
+                       node.get("reality-opts") is not None and
+                       node["reality-opts"]["public-key"] != pubkey)]
+            if bad:
+                print("FAIL: published node UUID/public key differs from running Xray configuration (count=%d)" % len(bad))
+                print("ACTION: refresh this VPS's Clash subscription; then update subscribers")
+                healthy = False
+            else:
+                print("PASS: local UUID/public key matches Xray/script state")
+        except (OSError, ValueError, KeyError, TypeError):
+            print("WARN: cannot check local Xray credentials")
+            healthy = False
+    for peer in config["peers"]:
+        cache = cache_path(cache_dir, peer)
+        try:
+            if fetcher is None:
+                with FETCHER.open(request.Request(peer["url"], headers={
+                    "Accept": "text/yaml", "User-Agent": "Xray-script/Provider-Diagnostics"
+                }), timeout=PEER_TIMEOUT_SECONDS) as response:
+                    raw = response.read(MAX_PROVIDER_BYTES + 1)
+            else:
+                raw = fetcher(peer["url"])
+            if len(raw) > MAX_PROVIDER_BYTES:
+                raise ProviderError("Provider exceeds download limit")
+            data = parse_provider(raw.decode("utf-8"))
+            print("PASS:", peer["name"], "remote Provider fetched; nodes=", len(data))
+        except Exception as exc:
+            healthy = False
+            try:
+                data = parse_provider(cache.read_text(encoding="utf-8"))
+                age = int(max(0, time.time() - cache.stat().st_mtime))
+                cache_status = "cached nodes=%d; age=%ds" % (len(data), age)
+                if age > MAX_STALE_SECONDS:
+                    cache_status += "; EXPIRED"
+            except (OSError, UnicodeError, ProviderError):
+                cache_status = "no valid cache"
+            status = ("HTTP %d" % exc.code) if isinstance(exc, __import__("urllib.error", fromlist=["HTTPError"]).HTTPError) else type(exc).__name__
+            print("FAIL:", peer["name"], "remote Provider unavailable/invalid (%s); %s" % (status, cache_status))
+            print("ACTION: test peer Provider URL from this VPS; verify token, HTTP/HTTPS port and service")
+    return healthy
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--local", type=Path, required=True)
     parser.add_argument("--cache-dir", type=Path, required=True)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=Path)
+    parser.add_argument("--diagnose", action="store_true")
+    parser.add_argument("--single", type=Path)
+    parser.add_argument("--xray", type=Path)
+    parser.add_argument("--script", type=Path)
     args = parser.parse_args()
     try:
+        if args.diagnose:
+            return 0 if inspect_publications(args.config, args.local, args.cache_dir,
+                                              args.single, args.xray, args.script) else 1
+        if args.output is None:
+            parser.error("--output is required when not diagnosing")
         content = aggregate(args.config, args.local, args.cache_dir)
         atomic_write(args.output, content)
     except (ValueError, OSError) as exc:
@@ -289,4 +386,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
