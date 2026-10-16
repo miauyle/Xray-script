@@ -54,6 +54,21 @@
 
 ## 更新日志
 
+20. v2026.10.16.2 新增主机防火墙、conntrack_max、Swap 运维管理。Xray/TCP/UDP 或 Python 订阅端口启用前检查本机防火墙，经终端确认后才放行；Oracle VCN Security List/NSG 云端规则仍需人工配置。conntrack_max 支持内核立即写入验证与启动持久化，Swap 支持单独创建 1–32 GiB 并在 fstab 持久化，含隔离自动化测试。
+
+### Oracle Ubuntu 主机运维（v2026.10.16.2）
+
+主菜单选「11. 运维与诊断」→「10. 防火墙 / 11. conntrack_max / 12. Swap」。
+
+防火墙：启动新的 Xray、Nginx 或 Python 订阅监听端口前检查本机 IPv4 规则；如未明确放行，终端主动询问。确认前不修改任何规则，拒绝后原规则保留。启用 UFW 时使用 UFW，否则使用 iptables，并将脚本新增的 ACCEPT 规则记录在 /etc/xray-script/firewall-ports.conf，通过 xray-script-firewall.service 在重启时恢复，不清空 INPUT、也不改变 SSH 端口。独立的 Oracle Cloud Security List / NSG 入站规则仍需自己在 OCI 控制台添加；「本机规则允许」不等于公网可达。未知 nftables 管理环境只显示警告，不自动变更。
+
+conntrack：菜单可查看 nf_conntrack_count/max，默认建议 16384（输入时可改，范围 1024–1048576），先检查是否低于当前 count，再执行 sysctl -w 并读取内核验证，然后保存到 /etc/sysctl.d/99-z-xray-script-conntrack.conf；还将 nf_conntrack 加入独立 modules-load.d 文件以处理开机模块加载时序。保留原始值以备恢复，不编辑其他 sysctl 文件。重启后仍应验证 sysctl net.netfilter.nf_conntrack_max 是否符合预期。
+
+Swap：默认仅创建 /var/lib/xray-script/swapfile，输入整数 1–32 GiB；验证磁盘剩余空间、文件系统、文件权限、mkswap 和 swapon，成功后写入带标识的 /etc/fstab 条目。删除仅针对该文件，不改已有 /swapfile 或其他 Swap 分区；swapoff 失败则拒绝删除。Btrfs 需特别处理，本功能明确拒绝自动创建。Oracle E2.1.Micro 可以从 1 GiB 开始，避免耗尽可用磁盘。
+
+命令示例：bash core/handler.sh --host firewall status 443 tcp；bash core/handler.sh --host conntrack set 16384；bash core/handler.sh --host swap add 1。
+
+
 19. v2026.10.16.1 修复多机聚合后远端节点可能使用过期凭据的问题，增加多机 Provider 诊断。
    1. Xray 配置成功更新后，如果已经生成过 Clash 订阅，自动重新生成本机的 `clash.yaml`、`proxies.yaml`、`multi_clash.yaml` 和 Shadowrocket 聚合订阅；刷新失败只警告，不回滚已成功运行的 Xray。
    2. Mihomo 远端 Provider 从每小时刷新缩短到每 5 分钟；Shadowrocket 远端 Provider 缓存仍支持临时失败回退，但超过 12 小时不再将旧节点当作有效节点输出。

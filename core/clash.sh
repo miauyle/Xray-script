@@ -847,6 +847,7 @@ function enable_remote() {
     previous_backend="$(state_value backend 2>/dev/null || true)"
 
     if nginx_subscription_available; then
+        host_fw_offer 443 tcp
         publish_nginx_subscription "${token}"
         rc=$?
         case "${rc}" in
@@ -864,6 +865,7 @@ function enable_remote() {
         command -v python3 >/dev/null 2>&1 || fail "$(msg remote_backend_missing)"
         confirm_http_fallback || fail "$(msg cancelled)"
         http_port="$(prompt_http_port)"
+        host_fw_offer "${http_port}" tcp
         publish_http_subscription "${token}" "${http_port}"
         rc=$?
         case "${rc}" in
@@ -991,5 +993,6 @@ function main() {
 }
 
 source "${CUR_DIR}/clash_multi.sh"
+source "${CUR_DIR}/host_tuning.sh"
 
 main "$@"

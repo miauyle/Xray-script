@@ -55,6 +55,17 @@
 
 ## Changelog
 
+20. v2026.10.16.2 adds consented local IPv4 firewall port checks before Xray/HTTP listeners, opt-in conntrack_max runtime + boot persistence, and separate managed swap files (1–32 GiB). Oracle Security List/NSG cloud ingress still requires separate configuration. Includes mocked integration tests.
+
+### Oracle Ubuntu host management
+
+Operations & Diagnostics offers firewall (10), conntrack_max (11), and Swap (12). Host firewall rules are never opened without a terminal confirmation. With UFW active, UFW persists the rule; otherwise iptables rules are inserted without flushing any existing rules or modifying SSH and are persisted through a dedicated xray-script-firewall.service. Cloud VCN Security List/NSG rules remain a separate requirement; a host firewall ACCEPT rule does not prove external reachability.
+
+conntrack_max uses sysctl -w and verifies the kernel value immediately, while dedicated sysctl.d and modules-load.d files maintain the setting after reboot. The original kernel value is backed up for restore. Swap uses /var/lib/xray-script/swapfile, verifies disk availability, permissions, mkswap/swapon, and adds only a managed fstab entry. Removal affects only managed swap and fails safely if swapoff is rejected. Btrfs automatic swap creation is unsupported.
+
+CLI from installed repository: bash core/handler.sh --host firewall status 443 tcp ; --host conntrack set 16384 ; --host swap add 1.
+
+
 19. v2026.10.16.1 fixes stale remote-node credentials in multi-server subscriptions. After a successful Xray regeneration, existing published single and multi subscriptions are refreshed without rolling back working Xray on refresh failure. Mihomo retries remote Providers every five minutes; Shadowrocket only falls back to cached remote nodes for up to 12 hours. Add **Multi-server subscriptions → 9. Diagnose Providers** to compare published UUID/Reality public keys with running Xray and verify remote Provider reachability without logging secrets. Clients must still refresh their subscriptions and Providers.
 
 

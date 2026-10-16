@@ -24,6 +24,7 @@ jobs:
           bash -n core/read.sh
           bash -n core/operations.sh
           bash -n core/bbr.sh
+          bash -n core/host_tuning.sh
           bash -n core/clash.sh
           bash -n core/clash_multi.sh
           bash -n service/docker.sh
