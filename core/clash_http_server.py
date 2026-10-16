@@ -19,6 +19,8 @@ class Handler(BaseHTTPRequestHandler):
         request_path = self.path.split("?", 1)[0]
         routes = [
             (self.server.token_file, self.server.yaml_file, "clash.yaml"),
+            # A leaf publishes its own Provider with the same single Token.
+            (self.server.token_file, self.server.provider_yaml_file, "proxies.yaml"),
             (self.server.multi_token_file, self.server.multi_yaml_file, "multi_clash.yaml"),
             (self.server.provider_token_file, self.server.provider_yaml_file, "proxies.yaml"),
             (self.server.provider_next_token_file, self.server.provider_yaml_file, "proxies.yaml"),
