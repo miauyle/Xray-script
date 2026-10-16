@@ -54,6 +54,9 @@
 
 ## 更新日志
 
+21. v2026.10.16.3 改进 Clash/Mihomo GeoSite / GeoIP 下载源：生成配置中的 `geox-url` 改为 MetaCubeX 上游 GitHub Releases latest 的真实二进制文件地址，不再强制使用 testingcf.jsdelivr.net 镜像。修复镜像返回非二进制内容时可能触发的 `invalid GeoSite database file: proto: cannot parse invalid wire-format data` 问题。此改动不更改 Xray 节点配置；客户端仍须重新生成/更新订阅并在必要时清理失效的 GeoSite 缓存。注意：GitHub Releases 在部分网络中可能不可达，网络超时与解析出错需区分排查。
+
+
 20. v2026.10.16.2 新增主机防火墙、conntrack_max、Swap 运维管理。Xray/TCP/UDP 或 Python 订阅端口启用前检查本机防火墙，经终端确认后才放行；Oracle VCN Security List/NSG 云端规则仍需人工配置。conntrack_max 支持内核立即写入验证与启动持久化，Swap 支持单独创建 1–32 GiB 并在 fstab 持久化，含隔离自动化测试。
 
 ### Oracle Ubuntu 主机运维（v2026.10.16.2）
