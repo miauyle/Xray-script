@@ -159,7 +159,7 @@ class ShadowrocketTests(unittest.TestCase):
         self.assertEqual(sr.aggregate(self.config, self.local, self.cache, fetcher=lambda u: (_ for _ in ()).throw(RuntimeError("should not fetch")), now=10000000), output)
         cache = sr.cache_path(self.cache, peer)
         self.assertEqual(cache.stat().st_mode & 0o777, 0o600)
-        os.utime(cache, (100, 100))
+        os.utime(cache, (10000000 - 301, 10000000 - 301))
         # Unreachable peer: leave cached node in subscription.
         after_failure = sr.aggregate(self.config, self.local, self.cache,
                                      fetcher=lambda u: (_ for _ in ()).throw(OSError("peer down")), now=10000000)
@@ -168,6 +168,15 @@ class ShadowrocketTests(unittest.TestCase):
         bad = sr.aggregate(self.config, self.local, self.cache,
                            fetcher=lambda u: b"proxies:\n  - name: 'Bad'\n    type: vless\n", now=10000000)
         self.assertEqual(bad, output)
+        # Never silently re-serve revoked credentials from days-old cache.
+        os.utime(cache, (10000000 - sr.MAX_STALE_SECONDS - 1,
+                         10000000 - sr.MAX_STALE_SECONDS - 1))
+        expired = decode(sr.aggregate(
+            self.config, self.local, self.cache,
+            fetcher=lambda u: (_ for _ in ()).throw(OSError("peer offline")),
+            now=10000000,
+        ))
+        self.assertEqual(len(expired), 2)
         # Rotating URL token invalidates the association to old cache.
         self.peer(token="N" * 43)
         after_rotation = decode(sr.aggregate(self.config, self.local, self.cache,
@@ -181,6 +190,62 @@ class ShadowrocketTests(unittest.TestCase):
         output = decode(sr.aggregate(self.config, self.local, self.cache,
                          fetcher=lambda u: (_ for _ in ()).throw(OSError("offline"))))
         self.assertEqual(len(output), 2)
+
+    def test_multi_doctor_detects_stale_live_xray_and_missing_peer(self):
+        import contextlib
+        import io
+        self.peer()
+        # The standalone and Provider YAML match, but live Xray has a new
+        # UUID. This is a real source of "standalone works, aggregated fails".
+        xray = self.root / "xray.json"
+        script = self.root / "script.json"
+        xray.write_text(json.dumps({
+            "inbounds": [{"settings": {"clients": [
+                {"id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"}]}}]
+        }))
+        script.write_text(json.dumps({"xray": {"publicKey": "PUBKEY-NEW"}}))
+        single = self.root / "clash.yaml"
+        # The existing marker layout is required by render_files.
+        base = multi.PROXY_MARKER + LOCAL.partition("proxies:\\n")[2] + multi.GROUP_MARKER + "\\n" + multi.RULE_MARKER + "\\n"
+        single.write_text(base)
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            healthy = sr.inspect_publications(
+                self.config, self.local, self.cache,
+                single=single, xray=xray, script=script,
+                fetcher=lambda u: (_ for _ in ()).throw(OSError("no remote")),
+            )
+        self.assertFalse(healthy)
+        text = output.getvalue()
+        self.assertIn("UUID/public key differs", text)
+        self.assertIn("remote Provider unavailable", text)
+        self.assertNotIn("PUBKEY-NEW", text)
+        self.assertNotIn("KKKKKKK", text)
+
+    def test_multi_doctor_good_local_and_remote(self):
+        import contextlib
+        import io
+        self.peer()
+        xray = self.root / "xray.json"
+        script = self.root / "script.json"
+        xray.write_text(json.dumps({"inbounds": [
+            {"settings": {"clients": [{"id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"}]}},
+            {"settings": {"clients": [{"id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"}]}}
+        ]}))
+        # In real configs both Reality transports use the same Xray public key.
+        # Normalize fixture's second key for this test.
+        self.local.write_text(LOCAL.replace("PUBKEY-BBB", "PUBKEY-AAA"))
+        script.write_text(json.dumps({"xray": {"publicKey": "PUBKEY-AAA"}}))
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            healthy = sr.inspect_publications(
+                self.config, self.local, self.cache,
+                xray=xray, script=script,
+                fetcher=lambda u: REMOTE.encode(),
+            )
+        self.assertTrue(healthy, output.getvalue())
+        self.assertIn("PASS: KR remote Provider fetched", output.getvalue())
+        self.assertNotIn("203.0.113.30/sub/", output.getvalue())
 
     def test_sni_tls_xhttp_with_alpn(self):
         nodes = sr.parse_provider(TLS_XHTTP)
