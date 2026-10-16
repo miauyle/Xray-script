@@ -15,7 +15,7 @@ from pathlib import Path
 import re
 import tempfile
 import time
-from urllib import request
+from urllib import error, request
 from urllib.parse import quote, urlencode
 
 from clash_multi import load_config, validate_peer, render_files
@@ -356,7 +356,7 @@ def inspect_publications(config_path, local_provider_path, cache_dir, single=Non
                     cache_status += "; EXPIRED"
             except (OSError, UnicodeError, ProviderError):
                 cache_status = "no valid cache"
-            status = ("HTTP %d" % exc.code) if isinstance(exc, __import__("urllib.error", fromlist=["HTTPError"]).HTTPError) else type(exc).__name__
+            status = ("HTTP %d" % exc.code) if isinstance(exc, error.HTTPError) else type(exc).__name__
             print("FAIL:", peer["name"], "remote Provider unavailable/invalid (%s); %s" % (status, cache_status))
             print("ACTION: test peer Provider URL from this VPS; verify token, HTTP/HTTPS port and service")
     return healthy
