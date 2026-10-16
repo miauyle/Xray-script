@@ -33,6 +33,33 @@ host_fw_backend() {
 host_fw_owned() {
     iptables -C INPUT -p "$2" --dport "$1" -m comment --comment XRAY-SCRIPT -j ACCEPT >/dev/null 2>&1
 }
+# Conservative INPUT-chain ordering check: an ACCEPT after a catch-all
+# REJECT/DROP must never be treated as an open port (common on OCI images).
+host_fw_rule_reachable() {
+    local port="$1" proto="$2" rules="$3" line
+    while IFS= read -r line; do
+        [[ "$line" == '-A INPUT '* ]] || continue
+        # Ignore rules that explicitly reference another port/protocol.
+        if [[ "$line" == *" --dport "* && "$line" != *" --dport $port "* ]]; then
+            continue
+        fi
+        if [[ "$line" == *" -p tcp "* && "$proto" != tcp ||
+              "$line" == *" -p udp "* && "$proto" != udp ]]; then
+            continue
+        fi
+        # A matching (or unconditional) drop/reject first wins.
+        if [[ "$line" == *" -j REJECT"* || "$line" == *" -j DROP"* ]]; then
+            return 1
+        fi
+        # Only unqualified port-specific ACCEPT is safely recognizable.
+        if [[ "$line" == *" -p $proto "* && "$line" == *" --dport $port "* &&
+              "$line" == *" -j ACCEPT"* ]]; then
+            return 0
+        fi
+    done <<<"$rules"
+    return 1
+}
+
 host_fw_status() {
     local port="$1" proto="${2:-tcp}" backend rules policy
     host_valid_rule "$port" "$proto" || { host_fail "Invalid port/protocol."; return 2; }
@@ -48,15 +75,11 @@ host_fw_status() {
         host_message "Host UFW: no verified allow rule for $port/$proto."
         return 1 ;;
     iptables)
-        if host_fw_owned "$port" "$proto"; then
-            host_message "Host iptables: managed ACCEPT rule exists for $port/$proto."
-            return 0
-        fi
         rules="$(iptables -S INPUT 2>/dev/null)" || return 2
-        # Only claim an open rule when there is a direct explicit ACCEPT.
-        # Other chains, precedence and nftables may still restrict access.
-        if iptables -C INPUT -p "$proto" --dport "$port" -j ACCEPT >/dev/null 2>&1; then
-            host_message "Host iptables: ACCEPT rule exists for $port/$proto (verify ordering/other tables)."
+        # -C alone is insufficient: a rule appended after an OCI catch-all
+        # REJECT is present but ineffective.
+        if host_fw_rule_reachable "$port" "$proto" "$rules"; then
+            host_message "Host iptables: early ACCEPT found for $port/$proto (cloud ingress still separate)."
             return 0
         fi
         policy="$(printf '%s\n' "$rules" | sed -n 's/^-P INPUT //p' | head -n1)"
@@ -127,7 +150,16 @@ host_fw_open() {
         host_fw_status "$port" "$proto"
         return $?
     elif [[ "$backend" == iptables ]]; then
-        if ! host_fw_owned "$port" "$proto"; then
+        # Reposition only our own rule if a preceding REJECT/DROP masks it.
+        # Never touch unrelated system or SSH rules.
+        if host_fw_owned "$port" "$proto"; then
+            if ! host_fw_rule_reachable "$port" "$proto" "$(iptables -S INPUT)"; then
+                iptables -w 5 -D INPUT -p "$proto" --dport "$port" -m comment --comment XRAY-SCRIPT -j ACCEPT ||
+                    return 1
+                iptables -w 5 -I INPUT 1 -p "$proto" --dport "$port" -m comment --comment XRAY-SCRIPT -j ACCEPT ||
+                    return 1
+            fi
+        else
             iptables -w 5 -I INPUT 1 -p "$proto" --dport "$port" -m comment --comment XRAY-SCRIPT -j ACCEPT ||
                 return 1
         fi
