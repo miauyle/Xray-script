@@ -1518,6 +1518,17 @@ function handler_xray_config() {
     if [[ "${pending_guard}" -eq 1 ]]; then
         trap - EXIT
     fi
+
+    # Xray credentials, ports and REALITY key pairs can change when regenerating
+    # its config. Serving the old clash.yaml/proxies.yaml after a successful
+    # Xray apply leaves remote providers pointing at *revoked* node credentials.
+    # Refresh published subscriptions only after the new Xray config succeeded;
+    # this must not roll back a working Xray service on a subscription error.
+    if [[ "${apply_mode}" != 'defer' && -n "${SCRIPT_CONFIG_DIR:-}" && -n "${CLASH_PATH:-}" && -f "${SCRIPT_CONFIG_DIR}/clash/clash.yaml" ]]; then
+        if ! bash "${CLASH_PATH}" generate >&2; then
+            echo -e "${YELLOW}[WARN]${NC} Xray updated but subscription regeneration failed. Run Clash subscription → Generate/Refresh on this VPS before using remote Providers." >&2
+        fi
+    fi
     # The optional EXIT-trap cleanup must not determine the operation result.
     return 0
 }

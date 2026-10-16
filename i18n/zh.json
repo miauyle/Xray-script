@@ -204,7 +204,8 @@
       "option5": "更换本机多机订阅 Token",
       "option6": "预生成新的 Provider Token（旧 Token 暂时有效）",
       "option7": "确认 Provider Token 轮换（其他 VPS 更新后再执行）",
-      "option8": "关闭多机订阅（保留单机订阅）"
+      "option8": "关闭多机订阅（保留单机订阅）",
+      "option9": "诊断多机 Provider 与 Xray 参数是否一致"
     },
     "bbr": {
       "title": "TCP BBR 网络优化",

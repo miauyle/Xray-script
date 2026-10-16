@@ -977,6 +977,7 @@ function main() {
     generate) generate_yaml ;;
     enable) enable_remote ;;
     multi-enable) multi_enable ;;
+    multi-doctor) multi_doctor ;;
     multi-add) multi_add "${@:2}" ;;
     multi-remove) multi_remove "${@:2}" ;;
     multi-show) multi_show ;;

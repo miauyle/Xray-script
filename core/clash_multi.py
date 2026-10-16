@@ -148,7 +148,7 @@ def render_files(single_yaml, peers):
                 "  " + quote(name) + ":",
                 "    type: http",
                 "    url: " + quote(peer["url"]),
-                "    interval: 3600",
+                "    interval: 300",
                 "    proxy: DIRECT",
                 "    health-check:",
                 "      enable: true",
