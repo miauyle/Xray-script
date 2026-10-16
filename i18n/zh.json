@@ -190,7 +190,10 @@
       "option6": "导出配置包",
       "option7": "导入配置包",
       "option8": "Direct IPv4/IPv6 出口策略",
-      "option9": "TCP BBR 网络优化"
+      "option9": "TCP BBR 网络优化",
+      "option10": "防火墙与端口检查",
+      "option11": "conntrack_max 管理",
+      "option12": "Swap 管理"
     },
     "direct_family": {
       "title": "Direct 出口 IP family"
@@ -212,6 +215,23 @@
       "option1": "查看 TCP 拥塞控制状态",
       "option2": "开启 BBR + fq（持久化）",
       "option3": "恢复启用前的 TCP 设置"
+    },
+    "host_firewall": {
+      "title": "防火墙端口 (OCI 云安全规则需单独配置)",
+      "option1": "查看本机端口规则",
+      "option2": "检查并经确认后开放端口"
+    },
+    "host_conntrack": {
+      "title": "nf_conntrack_max (默认建议 16384)",
+      "option1": "查看当前值及连接跟踪占用",
+      "option2": "设置并持久化",
+      "option3": "恢复原值"
+    },
+    "host_swap": {
+      "title": "Swap 管理 (GiB)",
+      "option1": "查看内存与 Swap",
+      "option2": "创建指定大小 Swap (1-32 GiB)",
+      "option3": "安全移除脚本管理的 Swap"
     }
   },
   "handler": {
