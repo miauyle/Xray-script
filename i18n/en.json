@@ -190,7 +190,10 @@
       "option6": "Export config bundle",
       "option7": "Import config bundle",
       "option8": "Direct IPv4/IPv6 policy",
-      "option9": "TCP BBR network tuning"
+      "option9": "TCP BBR network tuning",
+      "option10": "Firewall and listener port checks",
+      "option11": "conntrack_max management",
+      "option12": "Swap management"
     },
     "direct_family": {
       "title": "Direct egress IP family"
@@ -212,6 +215,23 @@
       "option1": "Show TCP congestion control status",
       "option2": "Enable persistent BBR + fq",
       "option3": "Restore the previous TCP settings"
+    },
+    "host_firewall": {
+      "title": "Host firewall (OCI cloud ingress is separate)",
+      "option1": "Inspect local port rule",
+      "option2": "Check and consent to opening port"
+    },
+    "host_conntrack": {
+      "title": "nf_conntrack_max (default 16384)",
+      "option1": "Status and conntrack occupancy",
+      "option2": "Apply and persist a value",
+      "option3": "Restore previous value"
+    },
+    "host_swap": {
+      "title": "Managed swap in GiB",
+      "option1": "Show memory and swap",
+      "option2": "Create swap of specified GiB (1-32)",
+      "option3": "Safely remove managed swap"
     }
   },
   "handler": {
