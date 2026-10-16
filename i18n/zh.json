@@ -206,7 +206,8 @@
       "option4": "查看中心聚合订阅与本机 Provider",
       "option5": "更换中心聚合订阅 Token",
       "option6": "关闭中心（保留本机独立订阅）",
-      "option7": "诊断中心与远端 Provider"
+      "option7": "诊断中心与远端 Provider",
+      "option8": "查看已添加子节点名称及完整 Provider URL（含 Token）"
     },
     "bbr": {
       "title": "TCP BBR 网络优化",
