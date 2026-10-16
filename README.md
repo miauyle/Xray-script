@@ -54,6 +54,8 @@
 
 ## 更新日志
 
+23. v2026.10.16.5 中心聚合订阅菜单新增「8. 查看已添加子节点名称及完整 Provider URL」。仅主动选择该项时读取中心的 `multi-server.json` 并输出全部远端节点地址（包含 Token），不改变原有订阅、连接配置、普通 `show` 脱敏行为或中心列表。请勿公开该页面的完整 URL 或截图。
+
 22. v2026.10.16.4 将旧多机对等订阅简化为「唯一中心 + 普通 VPS 独立订阅」：普通 VPS 生成并发布 `clash.yaml`/`proxies.yaml`，共用原单机 Token；仅中心维护服务器列表和聚合订阅；删除旧 Provider Token 轮换菜单，旧 Token 暂时保持兼容。升级不自动改变任何机器的中心角色；按迁移说明手动关闭旧副中心。
 
 21. v2026.10.16.3 改进 Clash/Mihomo GeoSite / GeoIP 下载源：生成配置中的 `geox-url` 改为 MetaCubeX 上游 GitHub Releases latest 的真实二进制文件地址，不再强制使用 testingcf.jsdelivr.net 镜像。修复镜像返回非二进制内容时可能触发的 `invalid GeoSite database file: proto: cannot parse invalid wire-format data` 问题。此改动不更改 Xray 节点配置；客户端仍须重新生成/更新订阅并在必要时清理失效的 GeoSite 缓存。注意：GitHub Releases 在部分网络中可能不可达，网络超时与解析出错需区分排查。
@@ -222,6 +224,8 @@ SNI 配置中，CDN 的分享链接 Alpn 默认为 H2，如有 H3 需求，请�
 
 - /sub/<center-token>/multi_clash.yaml：Mihomo/Clash Verge Rev（Proxy Providers、Auto/Failover/Balance）。
 - /sub/<center-token>/multi_nodes.txt：Shadowrocket 的 Base64 VLESS 节点订阅。
+
+中心菜单「10 → 6 → 8」可以查看已经添加的所有子节点名称及完整 Provider URL（包括 Token），便于核对地址及重新复制；未添加节点时会显示空列表。普通「查看订阅信息」不泄露子节点完整地址。
 
 中心仍包含本机节点，远端不可用时 Shadowrocket 最多回退 12 小时内的上次有效缓存；Mihomo 的远端 Provider 由客户端更新。任何 VPS 的独立订阅与中心无关。中心故障时，现有已导入节点一般仍可继续使用，但中心订阅无法更新，需要手工恢复中心。**没有自动主副切换。**
 

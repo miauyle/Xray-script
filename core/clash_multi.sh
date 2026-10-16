@@ -178,6 +178,13 @@ multi_url() {
     fi
 }
 
+# Display configured remote Provider addresses only on explicit operator request.
+multi_list() {
+    multi_is_enabled || fail "This VPS is not the aggregation center."
+    warn "Provider URLs contain access credentials; keep this output private."
+    python3 "${MULTI_HELPER}" --config "${MULTI_CONFIG_PATH}" list
+}
+
 multi_doctor() {
     multi_is_enabled || fail "Center not enabled here; this VPS is a standalone node."
     python3 "${SHADOWROCKET_HELPER}" \

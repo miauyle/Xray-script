@@ -125,6 +125,53 @@ class MultiGeneratorTests(unittest.TestCase):
             multi.edit_config(path, "disable")
             self.assertEqual(len(multi.load_config(path)["peers"]), 1)
 
+    def test_explicit_center_list_shows_all_urls_without_leaking_via_status(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            config = root / "multi-server.json"
+            peers = [
+                ("Tokyo", "http://203.0.113.10:8080/sub/" + "A" * 22 + "/proxies.yaml"),
+                ("Chuncheon", "https://provider.example.com/sub/" + "B" * 43 + "/proxies.yaml"),
+            ]
+            multi.edit_config(config, "enable")
+            for name, url in peers:
+                multi.edit_config(config, "add", name, url)
+            script = [sys.executable, str(ROOT / "core" / "clash_multi.py"),
+                      "--config", str(config)]
+            normal = subprocess.run(script + ["show"], capture_output=True, text=True)
+            self.assertEqual(normal.returncode, 0, normal.stderr)
+            self.assertIn("Tokyo", normal.stdout)
+            self.assertIn("Chuncheon", normal.stdout)
+            for name, url in peers:
+                self.assertNotIn(url, normal.stdout)
+                self.assertNotIn(url.split("/sub/")[1].split("/")[0], normal.stdout)
+
+            listed = subprocess.run(script + ["list"], capture_output=True, text=True)
+            self.assertEqual(listed.returncode, 0, listed.stderr)
+            for name, url in peers:
+                self.assertIn(name, listed.stdout)
+                self.assertIn(url, listed.stdout)
+            # Viewing providers is read-only: no file writes, rotations,
+            # network requests or changes to the center configuration.
+            self.assertEqual(multi.load_config(config)["peers"],
+                             [{"name": name, "url": url} for name, url in peers])
+
+            multi.edit_config(config, "remove", "Tokyo")
+            after_remove = subprocess.run(script + ["list"], capture_output=True, text=True)
+            self.assertNotIn("Tokyo", after_remove.stdout)
+            self.assertIn("Chuncheon", after_remove.stdout)
+
+            multi.edit_config(config, "remove", "Chuncheon")
+            empty = subprocess.run(script + ["list"], capture_output=True, text=True)
+            self.assertEqual(empty.returncode, 0)
+            self.assertIn("No remote VPS Providers configured.", empty.stdout)
+
+            multi.edit_config(config, "disable")
+            disabled = subprocess.run(script + ["list"], capture_output=True, text=True)
+            self.assertNotEqual(disabled.returncode, 0)
+            self.assertNotIn("Chuncheon", disabled.stdout)
+
     def test_single_peerless_degradation(self):
         local, aggregated = multi.render_files(SINGLE, [])
         self.assertIn("Fallback-XHTTP-Reality", local)

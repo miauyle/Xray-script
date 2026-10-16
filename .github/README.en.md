@@ -55,6 +55,8 @@
 
 ## Changelog
 
+23. v2026.10.16.5 adds center menu item 8 to list configured remote VPS labels and their full Provider URLs on demand. URL bearer tokens remain hidden from routine status output. No subscription changes.
+
 22. v2026.10.16.4 replaces equal-peer setup with a single center. Each standalone VPS independently publishes `proxies.yaml` under its original single subscription token; only the selected center stores peers. Old Provider token paths remain available during migration, but there is no new dedicated Provider token rotation.
 
 21. v2026.10.16.3 switches generated Clash/Mihomo `geox-url` GeoSite and GeoIP sources from the optional testingcf.jsdelivr.net mirror to official MetaCubeX GitHub Release assets. This avoids relying on a CDN mirror that may deliver non-protobuf content in some networks. The error `invalid GeoSite database file: proto: cannot parse invalid wire-format data` may also require deleting a previously corrupted client cache. This does not change Xray nodes; update the subscription before retrying. GitHub reachability varies by network.
@@ -222,6 +224,8 @@ Each regular VPS publishes both /sub/<single-token>/clash.yaml (standalone Mihom
 Enable the aggregation center on ONE VPS only after its standalone subscription is configured. Add the other standalone VPS Provider URLs in the center's menu (Clash → Central aggregator). The center keeps its existing multi-server.json and multi-token and publishes multi_clash.yaml for Mihomo and multi_nodes.txt for Shadowrocket. The center may itself be a proxy VPS. A center outage interrupts subscription updates but does not normally disconnect cached client proxy nodes. There is no automatic center failover.
 
 For migration: upgrade all VPSs, regenerate each standalone YAML, refresh each VPS's remote subscription publication (restart the existing Python HTTP server or reload Nginx), update remote Provider URLs on the chosen center, then disable aggregation on every other VPS. The upgrade does NOT silently disable previously enabled peer configurations. Old Provider token URLs remain readable temporarily for compatibility; new standalone Providers use their ordinary single-token URL. Do not revoke legacy credentials until the center uses the new URLs. No dedicated Provider-token rotation menu remains.
+
+The center menu item 8 (`Clash → Central aggregator → List remote Providers`) displays all stored remote VPS names and full Provider URLs, including bearer tokens, only when explicitly requested. Never share its output or screenshots. Routine center status continues hiding remote credentials.
 
 Mihomo Proxy Providers are updated by the client and Shadowrocket subscriptions are aggregated by the center. Only the center maintains a peer list, and only the center exposes the multi-server subscription URL. Shadowrocket XHTTP compatibility still requires real client testing.
 

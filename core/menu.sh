@@ -457,7 +457,7 @@ function menu_clash_subscription() {
 function menu_clash_multi() {
     echo -e "------------------ $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.clash_multi.title") ------------------"
     local i
-    for i in 1 2 3 4 5 6 7; do
+    for i in 1 2 3 4 5 6 7 8; do
         echo -e "${GREEN}${i}.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.clash_multi.option${i}")"
     done
     echo -e "------------------------------------------------------"

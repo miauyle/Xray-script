@@ -581,6 +581,7 @@ function processes_clash_multi() {
     5) exec_handler '--clash' 'multi-rotate' 'multi' ;;
     6) exec_handler '--clash' 'multi-disable' ;;
     7) exec_handler '--clash' 'multi-doctor' ;;
+    8) exec_handler '--clash' 'multi-list' ;;
     *) return 0 ;;
     esac
 }

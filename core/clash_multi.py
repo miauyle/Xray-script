@@ -194,7 +194,7 @@ def main():
     add.add_argument("url")
     remove = sub.add_parser("remove")
     remove.add_argument("name")
-    for op in ("enable", "disable", "show"):
+    for op in ("enable", "disable", "show", "list"):
         sub.add_parser(op)
     args = parser.parse_args()
 
@@ -220,6 +220,20 @@ def main():
             config = load_config(args.config)
             print("enabled:", config["enabled"])
             print("peers:", ", ".join(p["name"] for p in config["peers"]) or "(none)")
+        elif args.command == "list":
+            if args.config is None:
+                raise ValueError("--config is required for center management")
+            config = load_config(args.config)
+            if not config["enabled"]:
+                raise ValueError("Center aggregation is not enabled on this VPS")
+            # Explicit, interactive admin action: print full credential-bearing
+            # URLs only here; regular status and diagnostics stay redacted.
+            if not config["peers"]:
+                print("No remote VPS Providers configured.")
+            else:
+                for i, peer in enumerate(config["peers"], 1):
+                    print(f"{i}. {peer['name']}")
+                    print(f"   Provider URL: {peer['url']}")
         else:
             if args.config is None:
                 raise ValueError("--config is required for center management")
