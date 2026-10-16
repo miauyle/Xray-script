@@ -95,7 +95,7 @@ while IFS=: read -r proto port; do
     ((10#$port >= 1 && 10#$port <= 65535)) || continue
     iptables -w 5 -C INPUT -p "$proto" --dport "$port" -m comment --comment XRAY-SCRIPT -j ACCEPT 2>/dev/null ||
         iptables -w 5 -I INPUT 1 -p "$proto" --dport "$port" -m comment --comment XRAY-SCRIPT -j ACCEPT
-done </etc/xray-script/firewall-ports.conf
+done <"${HOST_FW_PORTS:-/etc/xray-script/firewall-ports.conf}"
 EOF_HOST_FIREWALL
     chmod 700 "$HOST_FW_RESTORE" || return 1
     cat >"$HOST_FW_UNIT" <<'EOF_HOST_FW_SERVICE'
