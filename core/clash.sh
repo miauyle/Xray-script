@@ -995,6 +995,7 @@ function main() {
     multi-add) multi_add "${@:2}" ;;
     multi-remove) multi_remove "${@:2}" ;;
     multi-show) multi_show ;;
+    multi-list) multi_list ;;
     multi-disable) multi_disable ;;
     multi-rotate) multi_rotate "${2:-}" ;;
     rotate) rotate_remote ;;
