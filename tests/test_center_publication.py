@@ -11,13 +11,13 @@ SOURCE = (ROOT / "core" / "clash.sh").read_text(encoding="utf-8")
 
 
 def extract_shell_function(name):
-    match = re.search(
-        r"(?ms)^function " + re.escape(name) + r"\(\) \{.*?^\}\s*$",
-        SOURCE,
-    )
-    if match is None:
-        raise AssertionError("Function missing: " + name)
-    return match.group(0)
+    # Here-doc Nginx blocks contain standalone closing braces; a first-match
+    # function regex would truncate the Bash function at its first location.
+    anchor = "function " + name + "() {"
+    next_anchor = "\nfunction restore_nginx_file() {"
+    if anchor not in SOURCE or next_anchor not in SOURCE:
+        raise AssertionError("Missing Nginx function boundary")
+    return anchor + SOURCE.split(anchor, 1)[1].split(next_anchor, 1)[0]
 
 
 class PublicationNginxTests(unittest.TestCase):
