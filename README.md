@@ -54,6 +54,8 @@
 
 ## 更新日志
 
+22. v2026.10.16.4 将旧多机对等订阅简化为「唯一中心 + 普通 VPS 独立订阅」：普通 VPS 生成并发布 `clash.yaml`/`proxies.yaml`，共用原单机 Token；仅中心维护服务器列表和聚合订阅；删除旧 Provider Token 轮换菜单，旧 Token 暂时保持兼容。升级不自动改变任何机器的中心角色；按迁移说明手动关闭旧副中心。
+
 21. v2026.10.16.3 改进 Clash/Mihomo GeoSite / GeoIP 下载源：生成配置中的 `geox-url` 改为 MetaCubeX 上游 GitHub Releases latest 的真实二进制文件地址，不再强制使用 testingcf.jsdelivr.net 镜像。修复镜像返回非二进制内容时可能触发的 `invalid GeoSite database file: proto: cannot parse invalid wire-format data` 问题。此改动不更改 Xray 节点配置；客户端仍须重新生成/更新订阅并在必要时清理失效的 GeoSite 缓存。注意：GitHub Releases 在部分网络中可能不可达，网络超时与解析出错需区分排查。
 
 
@@ -207,69 +209,26 @@ SNI 配置中，CDN 的分享链接 Alpn 默认为 H2，如有 H3 需求，请�
 
 当前生成器支持 Vision+Reality、VLESS+XHTTP+Reality、Fallback 与 SNI 中的兼容 VLESS 节点。Mihomo 当前不支持 VLESS+mKCP 和 Trojan+XHTTP，脚本不会为这两类组合生成伪兼容配置。
 
-### 聚合后某台 VPS 节点失效：快速诊断
+### 单一中心订阅架构（v2026.10.16.4 起）
 
-如果副节点的单机 `clash.yaml` 能正常访问，但聚合后的节点延迟测试全部失败：
+**普通 VPS** 仅使用「10. Clash/Mihomo 配置与订阅 → 1. 生成/刷新 YAML → 2. 开启/刷新远程订阅」。它会自动发布两个使用**同一单机 Token** 的文件：
 
-1. 先在 **每台 VPS** 更新到 `v2026.10.16.1`，执行「Clash/Mihomo 配置与订阅 → 1. 生成/刷新配置」。这一步不更改 Xray 的密钥或服务器协议。
-2. 在聚合入口 VPS 执行「Clash/Mihomo 配置与订阅 → 6. 多服务器订阅管理 → 9. 诊断多机 Provider」（CLI：`bash core/clash.sh multi-doctor`，在已安装的项目内执行）。检查每个 `PASS/FAIL`：`HTTP 404` 通常是 Provider Token/发布路径不匹配；超时或连接错误优先检查订阅监听端口、防火墙与服务器间网络。
-3. 在**被引用的副 VPS** 也运行第 9 项：检查 `proxies.yaml` 与其 `clash.yaml` 是否一致、节点 UUID 与 Reality 公钥是否匹配当前 Xray。诊断不会打印私钥或完整 Provider URL。
-4. A、B 两端均修复后，在 Clash Verge Rev 中手工刷新 **Provider 本身** 和主订阅；在 Shadowrocket 中重新更新 `multi_nodes.txt` 订阅。注意 Mihomo 的 Provider 缓存与 Shadowrocket 的服务端缓存不是同一个缓存。
-5. 如果仍失败，请保留第 9 项的无凭据诊断输出与客户端日志，以便区分订阅抓取错误、旧节点凭据与真正的 Xray 握手故障。不要公开 `multi-server.json`、Token URL、Reality Private Key 或完整节点订阅。
+- /sub/<single-token>/clash.yaml：包含节点与分流策略的独立 Mihomo 订阅；
+- /sub/<single-token>/proxies.yaml：纯节点 Provider，供唯一的中心引用。
 
-### Shadowrocket 单链接多 VPS 订阅
+普通 VPS **不需要**启用中心、多机模式，也不需要记住其他 VPS 的信息、生成新的 Provider Token、安装第二个守护进程。更新 Xray 凭据后，已有订阅仍按照原有流程重新生成。新增单机 Provider 路由生效前，老机器需在菜单中执行「2. 开启/刷新远程订阅」，使 Nginx 配置或 Python 订阅服务加载新版代码。
 
-在已有 **多服务器订阅管理** 中启用多机、添加其他 VPS 的 Provider URL 后，菜单“查看多机及 Provider 订阅信息”会同时显示：
+**唯一中心 VPS** 也先开启单机订阅，再选择「10 → 6. 中心聚合订阅管理 → 1. 将本机设为中心」。中心保存原来的 multi-server.json（仅中心有 enabled=true），添加其他 VPS 独立 Provider 地址，例如 http://VPS-B:PORT/sub/<single-token-B>/proxies.yaml。中心聚合依然使用自己现有的多机 Token：
 
-- `multi_clash.yaml`：原有 Clash Verge Rev / Mihomo 配置，**不变**。
-- `multi_nodes.txt`：**Shadowrocket 专用聚合订阅**，一个 URL 导入所有可用 VPS 的 VLESS 节点。与 Mihomo 订阅**共用 MULTI_TOKEN**，不增加任何服务器清单或新 Token。
+- /sub/<center-token>/multi_clash.yaml：Mihomo/Clash Verge Rev（Proxy Providers、Auto/Failover/Balance）。
+- /sub/<center-token>/multi_nodes.txt：Shadowrocket 的 Base64 VLESS 节点订阅。
 
-无需在 Shadowrocket 中为每台 VPS 单独创建订阅。通过 iPhone Shadowrocket 的「添加 → 类型：Subscribe / 订阅」，填写 `multi_nodes.txt` 完整地址即可。该订阅返回 Base64 编码的逐行 `vless://` 节点链接，兼容 TCP/Vision Reality、XHTTP Reality，以及原生成器支持的 TLS/XHTTP/CDN 节点。需使用支持相应 XHTTP 模式的较新 Shadowrocket 版本；手机端连通性仍应实际验证。
+中心仍包含本机节点，远端不可用时 Shadowrocket 最多回退 12 小时内的上次有效缓存；Mihomo 的远端 Provider 由客户端更新。任何 VPS 的独立订阅与中心无关。中心故障时，现有已导入节点一般仍可继续使用，但中心订阅无法更新，需要手工恢复中心。**没有自动主副切换。**
 
-**实现和故障处理**：数据由原来的 `multi-server.json` 和各 VPS `proxies.yaml` 自动汇总，不另设管理菜单或分支配置。Python HTTP 在订阅请求时并发刷新远程 Provider（5 分钟内使用缓存）；远程抓取失败或内容无效时继续提供上次成功缓存的节点，本机节点始终直接包含。首次拉取时某台远端不可用，则只显示已有缓存和本机节点。删除某台 VPS 或更换其 Provider URL 后不再读取旧缓存。
+**从旧的对等版本迁移**：先升级全部 VPS 到 v2026.10.16.4，分别运行「生成/刷新 YAML」和「开启/刷新远程订阅」以发布新的 /proxies.yaml。选择一台作为唯一中心，在该机添加/更新其他机器的新 Provider URL。其他 VPS 进入「10 → 6 → 6. 关闭中心」，独立订阅仍然可用。新版本**不会自动关闭**旧机器的 enabled=true 配置，也不偷偷修改远端配置。现有中心 Token 和服务器列表不会在升级时被重置；旧 Provider Token URL 仍临时受支持，但新架构不再生成或提供旧的 Provider Token 轮换菜单。中心确认全部切换到单机 Token 后，可自行计划安全地停用旧凭据。不要公开任何完整订阅 URL，其中含节点信息或凭据。
 
-如果复用现有 **Nginx HTTPS**，则输出静态 `multi_nodes.txt` 并通过 systemd **每 5 分钟执行一次性刷新任务**（没有新增常驻服务）。如果使用原来的 Python HTTP 服务，则不需要刷新定时器。多机关闭后会停止相应定时器。所有缓存保存在权限受限的 `~/.xray-script/clash/provider-cache/`。
+**操作诊断**：中心菜单「10 → 6 → 7」检查远端 Provider 可达性及中心本机参数。遇到节点聚合后连接失败时，先用普通 VPS 自己的 clash.yaml 对比，再检查中心订阅；无需再从每台机器相互添加 peer。
 
-**注意**：Shadowrocket 返回的是节点订阅，不会继承 Mihomo 的 `Auto`/`Failover`/`Balance` 代理组。Shadowrocket 自身的自动切换/策略需在客户端设置。任一 VPS 离线后，其他节点仍然存在，但如果作为**订阅入口**的那台 VPS 离线，应手动改用另一台 VPS 的完整 `multi_nodes.txt` URL。HTTP 明文传输包含节点和 Provider 凭据，应尽可能使用 HTTPS。
-
-### 多 VPS 对等订阅（可选，Mihomo Proxy Providers）
-
-现有 `clash.yaml` 单机订阅、Token 和 Xray 入站不变。每台 VPS 都可以独立发布：
-
-| URL 路径 | 内容 | Token |
-| --- | --- | --- |
-| `/sub/<single-token>/clash.yaml` | 原有完整单机订阅 | 旧 Token（原样保留） |
-| `/sub/<multi-token>/multi_clash.yaml` | 本机节点 + 远程 Provider + Auto/Failover/Balance | 独立多机 Token |
-| `/sub/<provider-token>/proxies.yaml` | 仅本机节点（供其他 VPS 引用） | 独立 Provider Token |
-
-三个 Token 互不通用，各 VPS 的 Token 也互不相同。远程 Provider 的 Token 会出现在客户端取得的 `multi_clash.yaml` 里，因此它是**访问范围隔离**，而不是防止订阅用户查看节点参数。**目前 Python HTTP 明文传输所有节点凭据；有条件时请使用 HTTPS。**
-
-首次启用两台机器的步骤（A 和 B 地位完全对等）：
-
-1. 在 A 和 B **分别**通过原有菜单开启单机远程订阅（有 Nginx 则复用 HTTPS，否则复用 Python HTTP；不要另外开端口）。
-2. 在 A 和 B **分别**进入 `Clash/Mihomo 配置与订阅 → 多服务器订阅管理 → 开启/刷新`。即使尚无 peers，此时也会导出该机 `proxies.yaml` 和可用的本机 `multi_clash.yaml`。
-3. 在 A 的多机菜单查看 B 的 Provider 地址并加入：在 A 配置中添加名称 `B`、URL `http://IP-B/sub/<provider-token-B>/proxies.yaml`。在 B 中反向添加 A 的 Provider URL，名称 `A`。每个名称只在当前 VPS 配置中唯一即可。
-4. 在客户端导入 A **或** B 的 `multi_clash.yaml`。正常情况下都可以看到四个节点；Auto 为默认，另可选 Failover、Balance 和手动节点。
-5. A 离线时，已导入配置的客户端仍可尝试通过 B 的 Provider 使用 B 节点；需要更换主订阅入口时，手动替换为 B 的**完整多机 URL（包括 B 自己的 Token）**，并不是仅替换 IP。
-
-多机菜单还提供添加/更新、删除 peer、查看状态、轮换 Token 和关闭多机订阅。所有 peer 信息仅保存在本机 `~/.xray-script/clash/multi-server.json`（0600）。修改 peer 后重新生成本机文件；**不会 SSH 登录另一台机器或改变它的配置**。多机模式零 peers 时仍输出有效的本机订阅。单机订阅关闭时，如果多机功能仍在使用，不会停止共用的 Python HTTP 服务。
-
-**Provider Token 安全轮换**：先“预生成新的 Provider Token”，此时旧、新 Provider URL 均有效；再将每台引用本机 Provider 的 VPS 更新为新的 URL，并确保客户端已更新其多机订阅；最后“确认 Provider Token 轮换”，吊销旧 Provider URL。每台机器都独立操作，旧单机 Token 不受影响。
-
-高级 CLI（亦可通过菜单执行）：
-
-```bash
-bash core/clash.sh multi-enable
-bash core/clash.sh multi-show
-bash core/clash.sh multi-add KR 'http://OTHER-IP/sub/OTHER_PROVIDER_TOKEN/proxies.yaml'
-bash core/clash.sh multi-remove KR
-bash core/clash.sh multi-rotate provider # 阶段一：生成待切换 Provider Token
-bash core/clash.sh multi-rotate finalize # 阶段二：撤销旧 Provider Token
-bash core/clash.sh multi-rotate multi    # 单独更换此 VPS 的多机 Token
-bash core/clash.sh multi-disable
-```
-
-说明：远程 Provider 在 **Mihomo 客户端**拉取和缓存。远端首次不可访问时，本机节点仍写在 `multi_clash.yaml` 里；远端恢复后客户端自动重试。现有 TCP 连接无法保证在节点宕机后无感迁移。如果作为订阅入口的 VPS 宕机，其 URL 本身不可用，但其余 VPS 各自的多机订阅 URL 仍然有效。
 
 ## Xray 配置自动备份
 

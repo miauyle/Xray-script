@@ -94,6 +94,37 @@ class MultiGeneratorTests(unittest.TestCase):
             self.assertEqual(provider.stat().st_mode & 0o777, 0o600)
             self.assertEqual(config.stat().st_mode & 0o777, 0o600)
 
+
+    def test_standalone_provider_without_center(self):
+        with tempfile.TemporaryDirectory() as td:
+            import subprocess
+            root = Path(td)
+            single = root / "clash.yaml"
+            provider = root / "proxies.yaml"
+            single.write_text(SINGLE)
+            result = subprocess.run([
+                sys.executable, str(ROOT / "core" / "clash_multi.py"),
+                "provider", "--single", str(single), "--provider", str(provider)
+            ], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(provider.read_text().count("  - name:"), 2)
+            self.assertNotIn("proxy-providers:", provider.read_text())
+            self.assertEqual(provider.stat().st_mode & 0o777, 0o600)
+            self.assertFalse((root / "multi-server.json").exists())
+
+    def test_center_peers_unchanged_on_disable(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "multi-server.json"
+            url = "http://198.51.100.20:8080/sub/" + "u" * 22 + "/proxies.yaml"
+            multi.edit_config(path, "enable")
+            multi.edit_config(path, "add", "Tokyo", url)
+            data = multi.load_config(path)
+            self.assertEqual(data["peers"], [{"name": "Tokyo", "url": url}])
+            _, merged = multi.render_files(SINGLE, data["peers"])
+            self.assertIn(url, merged)
+            multi.edit_config(path, "disable")
+            self.assertEqual(len(multi.load_config(path)["peers"]), 1)
+
     def test_single_peerless_degradation(self):
         local, aggregated = multi.render_files(SINGLE, [])
         self.assertIn("Fallback-XHTTP-Reality", local)
@@ -163,6 +194,7 @@ class HttpRouteTests(unittest.TestCase):
     def test_scoped_routes_and_token_rotation(self):
         for token, filename, expected in (
             ("single-secret", "clash.yaml", "old-single"),
+            ("single-secret", "proxies.yaml", "local-provider"),
             ("multi-secret", "multi_clash.yaml", "new-multi"),
             ("provider-secret", "proxies.yaml", "local-provider"),
             ("next-provider-secret", "proxies.yaml", "local-provider"),
@@ -174,6 +206,7 @@ class HttpRouteTests(unittest.TestCase):
             "/sub/single-secret/multi_clash.yaml",
             "/sub/multi-secret/clash.yaml",
             "/sub/provider-secret/multi_clash.yaml",
+            "/sub/multi-secret/proxies.yaml",
             "/sub/missing/proxies.yaml",
             "/sub/../single-secret/clash.yaml",
         ):
@@ -187,6 +220,7 @@ class HttpRouteTests(unittest.TestCase):
         (self.root / "multi.token").unlink()
         self.assertEqual(self.request("/sub/multi-secret/multi_clash.yaml")[0], 404)
         self.assertEqual(self.request("/sub/single-secret/clash.yaml")[0], 200)
+        self.assertEqual(self.request("/sub/single-secret/proxies.yaml")[0], 200)
 
 
 if __name__ == "__main__":

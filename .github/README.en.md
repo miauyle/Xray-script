@@ -55,6 +55,8 @@
 
 ## Changelog
 
+22. v2026.10.16.4 replaces equal-peer setup with a single center. Each standalone VPS independently publishes `proxies.yaml` under its original single subscription token; only the selected center stores peers. Old Provider token paths remain available during migration, but there is no new dedicated Provider token rotation.
+
 21. v2026.10.16.3 switches generated Clash/Mihomo `geox-url` GeoSite and GeoIP sources from the optional testingcf.jsdelivr.net mirror to official MetaCubeX GitHub Release assets. This avoids relying on a CDN mirror that may deliver non-protobuf content in some networks. The error `invalid GeoSite database file: proto: cannot parse invalid wire-format data` may also require deleting a previously corrupted client cache. This does not change Xray nodes; update the subscription before retrying. GitHub reachability varies by network.
 
 
@@ -213,18 +215,16 @@ Before replacing the live Xray configuration, the script automatically saves the
 A backup creation or permission failure aborts the config change. Failure to prune an older backup only emits a warning.
 
 
-## One Shadowrocket subscription for all VPS peers
+## One center, independent VPS Providers (v2026.10.16.4)
 
-With multi-server mode enabled, the same existing peer list (`multi-server.json`) now publishes two formats under the **same multi-server token**:
+Each regular VPS publishes both /sub/<single-token>/clash.yaml (standalone Mihomo subscription) and /sub/<single-token>/proxies.yaml (pure Provider) using the SAME existing single token. It does not enable aggregation or track any other servers.
 
-- `/sub/<MULTI_TOKEN>/multi_clash.yaml` — the unchanged Mihomo Proxy Providers configuration.
-- `/sub/<MULTI_TOKEN>/multi_nodes.txt` — a Base64-encoded, newline-separated `vless://` subscription for Shadowrocket.
+Enable the aggregation center on ONE VPS only after its standalone subscription is configured. Add the other standalone VPS Provider URLs in the center's menu (Clash → Central aggregator). The center keeps its existing multi-server.json and multi-token and publishes multi_clash.yaml for Mihomo and multi_nodes.txt for Shadowrocket. The center may itself be a proxy VPS. A center outage interrupts subscription updates but does not normally disconnect cached client proxy nodes. There is no automatic center failover.
 
-Import the **single `multi_nodes.txt` URL** in Shadowrocket as a subscription. No separate server lists, credentials or menu are needed. Local nodes always appear, and remote VPS nodes are loaded from their existing `proxies.yaml` endpoints. Successful remote results are cached for five minutes; failed refreshes preserve the last validated snapshot. Removed peers and changed Provider URLs do not reuse old caches.
+For migration: upgrade all VPSs, regenerate each standalone YAML, refresh each VPS's remote subscription publication (restart the existing Python HTTP server or reload Nginx), update remote Provider URLs on the chosen center, then disable aggregation on every other VPS. The upgrade does NOT silently disable previously enabled peer configurations. Old Provider token URLs remain readable temporarily for compatibility; new standalone Providers use their ordinary single-token URL. Do not revoke legacy credentials until the center uses the new URLs. No dedicated Provider-token rotation menu remains.
 
-The existing Python subscription server aggregates on demand; Nginx HTTPS deployments serve a locally generated snapshot refreshed with a five-minute systemd **one-shot timer** (no additional resident daemon). The timer is removed when multi-server subscriptions are disabled. The output supports generated VLESS TCP/Vision REALITY, XHTTP REALITY and TLS/XHTTP nodes, subject to the installed Shadowrocket version's transport support. Client-side validation is still necessary.
+Mihomo Proxy Providers are updated by the client and Shadowrocket subscriptions are aggregated by the center. Only the center maintains a peer list, and only the center exposes the multi-server subscription URL. Shadowrocket XHTTP compatibility still requires real client testing.
 
-This is a **node subscription**, not an export of Mihomo Auto/Failover/Balance groups; configure node selection in Shadowrocket. HTTP remains plaintext and reveals proxy credentials. If the serving VPS is offline, switch to the other VPS's complete subscription URL, including its own multi token.
 
 ## Operations & Diagnostics
 

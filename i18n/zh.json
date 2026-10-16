@@ -177,8 +177,8 @@
       "info2": "优先复用现有 Nginx HTTPS；否则可启用轻量 HTTP 订阅服务，默认端口 80，也可自定义",
       "info3": "显示本地 YAML 路径和当前远程订阅 URL",
       "info4": "生成新的随机 Token，旧订阅 URL 立即失效",
-      "info5": "仅关闭单机订阅；如果多机订阅仍启用，不会停止共享的订阅服务",
-      "option6": "多服务器订阅管理（Proxy Providers）"
+      "info5": "关闭本机单机订阅；若本机仍是中心，中心订阅仍可使用",
+      "option6": "中心聚合订阅管理（普通 VPS 无需开启）"
     },
     "operations": {
       "title": "运维与诊断",
@@ -199,16 +199,14 @@
       "title": "Direct 出口 IP family"
     },
     "clash_multi": {
-      "title": "多服务器 Clash/Mihomo 订阅",
-      "option1": "开启/刷新多机与 Provider 订阅（需先启用单机远程订阅）",
-      "option2": "添加或更新远程 VPS Provider 地址",
-      "option3": "删除远程 VPS",
-      "option4": "查看多机及 Provider 订阅信息",
-      "option5": "更换本机多机订阅 Token",
-      "option6": "预生成新的 Provider Token（旧 Token 暂时有效）",
-      "option7": "确认 Provider Token 轮换（其他 VPS 更新后再执行）",
-      "option8": "关闭多机订阅（保留单机订阅）",
-      "option9": "诊断多机 Provider 与 Xray 参数是否一致"
+      "title": "中心聚合订阅（仅在中心 VPS 启用）",
+      "option1": "将本机设为中心／刷新中心订阅",
+      "option2": "添加或更新普通 VPS 的独立 Provider URL",
+      "option3": "从中心移除 VPS",
+      "option4": "查看中心聚合订阅与本机 Provider",
+      "option5": "更换中心聚合订阅 Token",
+      "option6": "关闭中心（保留本机独立订阅）",
+      "option7": "诊断中心与远端 Provider"
     },
     "bbr": {
       "title": "TCP BBR 网络优化",
