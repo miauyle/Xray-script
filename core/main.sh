@@ -572,17 +572,15 @@ function processes_operations() {
 
 function processes_clash_multi() {
     exec_menu '--clash-multi'
-    local choose=$(echo $?)
+    local choose=$?
     case ${choose} in
     1) exec_handler '--clash' 'multi-enable' ;;
     2) exec_handler '--clash' 'multi-add' ;;
     3) exec_handler '--clash' 'multi-remove' ;;
     4) exec_handler '--clash' 'multi-show' ;;
     5) exec_handler '--clash' 'multi-rotate' 'multi' ;;
-    6) exec_handler '--clash' 'multi-rotate' 'provider' ;;
-    7) exec_handler '--clash' 'multi-rotate' 'finalize' ;;
-    8) exec_handler '--clash' 'multi-disable' ;;
-    9) exec_handler '--clash' 'multi-doctor' ;;
+    6) exec_handler '--clash' 'multi-disable' ;;
+    7) exec_handler '--clash' 'multi-doctor' ;;
     *) return 0 ;;
     esac
 }
