@@ -1508,6 +1508,11 @@ function handler_xray_config() {
     XRAY_RULES="$(echo "${XRAY_CONFIG}" | jq '.routing.rules')"
     # 更新脚本配置中的路由规则
     SCRIPT_CONFIG="$(echo "${SCRIPT_CONFIG}" | jq --argjson rules "${XRAY_RULES}" '.rules = $rules')"
+    # Check candidate public listening ports before applying a new Xray config.
+    # The user must explicitly consent before any host firewall rule is added.
+    if [[ "${apply_mode}" != defer ]] && declare -F host_fw_offer_xray >/dev/null; then
+        host_fw_offer_xray
+    fi
     # 统一执行 Xray 配置校验、自动备份和安全写入。
     case "${apply_mode}" in
     defer) ;;
@@ -2202,6 +2207,10 @@ function handler_reset_warp() {
 # 返回值: 无 (通过调用其他脚本执行操作)
 # =============================================================================
 function handler_nginx_install() {
+    if declare -F host_fw_offer >/dev/null; then
+        host_fw_offer 80 tcp
+        host_fw_offer 443 tcp
+    fi
     # 检查 nginx 命令是否存在
     if ! cmd_exists 'nginx'; then
         # 调用 nginx.sh 脚本安装 Nginx (带 Brotli 支持)
@@ -2612,6 +2621,7 @@ function handler_quick_install() {
 # 运维扩展依赖本文件中已经定义的 apply/backup/WARP helper。
 source "${OPERATIONS_PATH}"
 source "${CUR_DIR}/bbr.sh"
+source "${CUR_DIR}/host_tuning.sh"
 
 # =============================================================================
 # 函数名称: main
@@ -2673,6 +2683,7 @@ function main() {
     --traffic) handler_traffic ;;               # 显示流量统计
     --doctor) handler_doctor ;;
     --bbr) bbr_main "${1:-status}" ;;
+    --host) host_tuning_main "$@" ;;
     --logs) handler_logs ;;
     --warp-status) handler_warp_status ;;
     --warp-fallback) handler_warp_fallback ;;
