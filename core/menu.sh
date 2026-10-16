@@ -474,6 +474,30 @@ function menu_operations() {
     echo -e "${GREEN}7.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.operations.option7")"
     echo -e "${GREEN}8.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.operations.option8")"
     echo -e "${GREEN}9.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.operations.option9")"
+    echo -e "${GREEN}10.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.operations.option10")"
+    echo -e "${GREEN}11.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.operations.option11")"
+    echo -e "${GREEN}12.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.operations.option12")"
+    echo -e "------------------------------------------------------"
+}
+
+function menu_host_firewall() {
+    echo -e "------------------ $(echo "$I18N_DATA" | jq -r '.menu.host_firewall.title') ------------------"
+    echo -e "1. $(echo "$I18N_DATA" | jq -r '.menu.host_firewall.option1')"
+    echo -e "2. $(echo "$I18N_DATA" | jq -r '.menu.host_firewall.option2')"
+    echo -e "------------------------------------------------------"
+}
+function menu_host_conntrack() {
+    echo -e "------------------ $(echo "$I18N_DATA" | jq -r '.menu.host_conntrack.title') ------------------"
+    echo -e "1. $(echo "$I18N_DATA" | jq -r '.menu.host_conntrack.option1')"
+    echo -e "2. $(echo "$I18N_DATA" | jq -r '.menu.host_conntrack.option2')"
+    echo -e "3. $(echo "$I18N_DATA" | jq -r '.menu.host_conntrack.option3')"
+    echo -e "------------------------------------------------------"
+}
+function menu_host_swap() {
+    echo -e "------------------ $(echo "$I18N_DATA" | jq -r '.menu.host_swap.title') ------------------"
+    echo -e "1. $(echo "$I18N_DATA" | jq -r '.menu.host_swap.option1')"
+    echo -e "2. $(echo "$I18N_DATA" | jq -r '.menu.host_swap.option2')"
+    echo -e "3. $(echo "$I18N_DATA" | jq -r '.menu.host_swap.option3')"
     echo -e "------------------------------------------------------"
 }
 
@@ -621,6 +645,9 @@ function main() {
     --clash-multi) menu_clash_multi >&2 ;;
     --operations) menu_operations >&2 ;;
     --bbr) menu_bbr >&2 ;;
+    --host-firewall) menu_host_firewall >&2 ;;
+    --host-conntrack) menu_host_conntrack >&2 ;;
+    --host-swap) menu_host_swap >&2 ;;
     --direct-family) menu_direct_family >&2 ;;
     --banner) print_banner >&2 ;;         # 显示 Banner
     --status) print_status >&2 ;;         # 显示状态信息
