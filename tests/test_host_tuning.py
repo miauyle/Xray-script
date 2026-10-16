@@ -27,7 +27,7 @@ sysctl() {
         esac ;;
     -w)
         case "$2" in
-        net.netfilter.nf_conntrack_max=*) MOCK_CT_NOW="${2#*=}"; echo "$2" ;;
+        net.netfilter.nf_conntrack_max=*) MOCK_CT_NOW="@{2#*=}"; echo "$2" ;;
         *) return 1 ;;
         esac ;;
     *) return 1 ;;
@@ -39,9 +39,9 @@ iptables() {
         echo "-A INPUT -j REJECT"
         return 0
     fi
-    if [[ "$1" == -C ]]; then
+    if [[ "$1" == -C || ( "$1" == -w && "$3" == -C ) ]]; then
         if [[ -n "${MOCK_FW_TRACK_FILE:-}" ]]; then
-            [[ -f "$MOCK_FW_TRACK_FILE" ]] && grep -qx "managed" "$MOCK_FW_TRACK_FILE"
+            grep -qx managed "$MOCK_FW_TRACK_FILE" 2>/dev/null
         else
             [[ "$MOCK_FW_RULE" == managed ]]
         fi
@@ -51,7 +51,7 @@ iptables() {
         MOCK_FW_RULE=managed
         MOCK_FW_OPEN_COUNT=$((MOCK_FW_OPEN_COUNT+1))
         if [[ -n "${MOCK_FW_TRACK_FILE:-}" ]]; then
-            printf '%s\n' managed >>"$MOCK_FW_TRACK_FILE"
+            echo managed >>"$MOCK_FW_TRACK_FILE"
         fi
         return 0
     fi
@@ -60,9 +60,9 @@ iptables() {
 systemctl() { return 0; }
 modprobe() { return 0; }
 mkswap() { return 0; }
-fallocate() { printf 'mock-swap' >"${@: -1}"; }
+fallocate() { printf 'mock-swap' >"@{@: -1}"; }
 swapon() {
-    if [[ "${1:-}" == --show ]]; then echo "NAME TYPE SIZE USED PRIO"
+    if [[ "@{1:-}" == --show ]]; then echo "NAME TYPE SIZE USED PRIO"
     else MOCK_SWAPPED=1; fi
 }
 swapoff() { MOCK_SWAPPED=0; }
@@ -88,7 +88,7 @@ class HostTuningTests(unittest.TestCase):
                 HOST_SWAP_FILE=str(root / "swap" / "swapfile"),
                 HOST_FSTAB=str(root / "fstab"),
             )
-            script = HARNESS.replace("SOURCE_SCRIPT", str(SOURCE)).replace("${", "$" + "{") + "\n" + commands
+            script = HARNESS.replace("SOURCE_SCRIPT", str(SOURCE)).replace("@{", "$" + "{") + "\n" + commands
             return subprocess.run(["bash", "-c", script], text=True, capture_output=True,
                                   cwd=ROOT, env=env, timeout=20)
 
@@ -133,7 +133,7 @@ host_fw_open 443 tcp || exit 17
 [[ "$(grep -c '^tcp:443$' "$HOST_FW_PORTS")" == 1 ]] || exit 19
 ''')
 
-    def test_reboot_restore_script_is_repeatable(self):
+    def test_reboot_restore_script_is_idempotent(self):
         self.check(r'''
 host_fw_open 8443 tcp || exit 10
 [[ -s "$HOST_FW_RESTORE" ]] || exit 11
@@ -141,105 +141,9 @@ MOCK_FW_TRACK_FILE="$(mktemp)"
 export MOCK_FW_TRACK_FILE
 export -f iptables
 bash "$HOST_FW_RESTORE" || exit 12
-[[ "$(grep -c '^managed
-        self.check(r'''
-for v in 0 65536 '-1' '443;iptables -F'; do
-    if host_fw_open "$v" tcp; then exit 10; fi
-done
-if host_fw_open 443 'tcp;DROP'; then exit 11; fi
-[[ "$MOCK_FW_OPEN_COUNT" == 0 ]] || exit 12
-''')
-
-    def test_xray_port_auto_detection_tcp_udp_ignores_loopback_and_uds(self):
-        self.check(r'''
-XRAY_CONFIG='{"inbounds":[
- {"listen":"127.0.0.1","port":32768},
- {"listen":"0.0.0.0","port":443,"streamSettings":{"network":"tcp"}},
- {"listen":"0.0.0.0","port":26700,"streamSettings":{"network":"kcp"}},
- {"listen":"@uds2xhttp.sock","streamSettings":{"network":"xhttp"}}
-]}'
-called=""
-host_fw_offer() { called+="$1/$2 "; }
-host_fw_offer_xray || exit 10
-[[ "$called" == '26700/udp 443/tcp ' ]] || { echo "$called"; exit 11; }
-''')
-
-    def test_swap_create_one_gib_and_remove(self):
-        self.check(r'''
-host_swap_add 1 || exit 10
-[[ "$MOCK_SWAPPED" == 1 && -f "$HOST_SWAP_FILE" ]] || exit 11
-[[ "$(stat -c %a "$HOST_SWAP_FILE")" == 600 ]] || exit 12
-grep -Fqx "$HOST_SWAP_FILE none swap sw 0 0 $HOST_SWAP_MARKER" "$HOST_FSTAB" || exit 13
-host_swap_remove || exit 14
-[[ "$MOCK_SWAPPED" == 0 && ! -e "$HOST_SWAP_FILE" ]] || exit 15
-[[ "$(wc -l < "$HOST_FSTAB")" == 2 ]] || exit 16
-''')
-
-    def test_swap_rejects_unsafe_size_and_existing_path(self):
-        self.check(r'''
-for s in 0 -1 33 1.5 ';echo exploit'; do
-    if host_swap_add "$s"; then exit 10; fi
-done
-mkdir -p "$(dirname "$HOST_SWAP_FILE")"
-echo existing >"$HOST_SWAP_FILE"
-if host_swap_add 2; then exit 11; fi
-grep -qx existing "$HOST_SWAP_FILE" || exit 12
-if host_swap_remove; then exit 13; fi
-''')
-
-if __name__ == "__main__":
-    unittest.main()
- "$MOCK_FW_TRACK_FILE")" == 1 ]] || exit 13
+[[ "$(wc -l < "$MOCK_FW_TRACK_FILE")" == 1 ]] || exit 13
 bash "$HOST_FW_RESTORE" || exit 14
-[[ "$(grep -c '^managed
-        self.check(r'''
-for v in 0 65536 '-1' '443;iptables -F'; do
-    if host_fw_open "$v" tcp; then exit 10; fi
-done
-if host_fw_open 443 'tcp;DROP'; then exit 11; fi
-[[ "$MOCK_FW_OPEN_COUNT" == 0 ]] || exit 12
-''')
-
-    def test_xray_port_auto_detection_tcp_udp_ignores_loopback_and_uds(self):
-        self.check(r'''
-XRAY_CONFIG='{"inbounds":[
- {"listen":"127.0.0.1","port":32768},
- {"listen":"0.0.0.0","port":443,"streamSettings":{"network":"tcp"}},
- {"listen":"0.0.0.0","port":26700,"streamSettings":{"network":"kcp"}},
- {"listen":"@uds2xhttp.sock","streamSettings":{"network":"xhttp"}}
-]}'
-called=""
-host_fw_offer() { called+="$1/$2 "; }
-host_fw_offer_xray || exit 10
-[[ "$called" == '26700/udp 443/tcp ' ]] || { echo "$called"; exit 11; }
-''')
-
-    def test_swap_create_one_gib_and_remove(self):
-        self.check(r'''
-host_swap_add 1 || exit 10
-[[ "$MOCK_SWAPPED" == 1 && -f "$HOST_SWAP_FILE" ]] || exit 11
-[[ "$(stat -c %a "$HOST_SWAP_FILE")" == 600 ]] || exit 12
-grep -Fqx "$HOST_SWAP_FILE none swap sw 0 0 $HOST_SWAP_MARKER" "$HOST_FSTAB" || exit 13
-host_swap_remove || exit 14
-[[ "$MOCK_SWAPPED" == 0 && ! -e "$HOST_SWAP_FILE" ]] || exit 15
-[[ "$(wc -l < "$HOST_FSTAB")" == 2 ]] || exit 16
-''')
-
-    def test_swap_rejects_unsafe_size_and_existing_path(self):
-        self.check(r'''
-for s in 0 -1 33 1.5 ';echo exploit'; do
-    if host_swap_add "$s"; then exit 10; fi
-done
-mkdir -p "$(dirname "$HOST_SWAP_FILE")"
-echo existing >"$HOST_SWAP_FILE"
-if host_swap_add 2; then exit 11; fi
-grep -qx existing "$HOST_SWAP_FILE" || exit 12
-if host_swap_remove; then exit 13; fi
-''')
-
-if __name__ == "__main__":
-    unittest.main()
- "$MOCK_FW_TRACK_FILE")" == 1 ]] || exit 15
+[[ "$(wc -l < "$MOCK_FW_TRACK_FILE")" == 1 ]] || exit 15
 ''')
 
     def test_firewall_denies_injection(self):
