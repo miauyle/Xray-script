@@ -36,7 +36,13 @@ sysctl() {
 iptables() {
     if [[ "$1" == -S && "$2" == INPUT ]]; then
         echo "-P INPUT DROP"
+        if [[ "${MOCK_FW_RULE:-}" == managed && "${MOCK_FW_AFTER_REJECT:-0}" != 1 ]]; then
+            echo "-A INPUT -p tcp --dport 443 -m comment --comment XRAY-SCRIPT -j ACCEPT"
+        fi
         echo "-A INPUT -j REJECT"
+        if [[ "${MOCK_FW_AFTER_REJECT:-0}" == 1 ]]; then
+            echo "-A INPUT -p tcp --dport 443 -j ACCEPT"
+        fi
         return 0
     fi
     if [[ "$1" == -C || ( "$1" == -w && "$3" == -C ) ]]; then
@@ -131,6 +137,13 @@ grep -q 'WantedBy=multi-user.target' "$HOST_FW_UNIT" || exit 16
 host_fw_open 443 tcp || exit 17
 [[ "$MOCK_FW_OPEN_COUNT" == 1 ]] || exit 18
 [[ "$(grep -c '^tcp:443$' "$HOST_FW_PORTS")" == 1 ]] || exit 19
+''')
+
+    def test_rule_appended_after_oracle_reject_is_not_open(self):
+        self.check(r'''
+MOCK_FW_AFTER_REJECT=1
+if host_fw_status 443 tcp; then exit 10; fi
+[[ "$MOCK_FW_OPEN_COUNT" == 0 ]] || exit 11
 ''')
 
     def test_reboot_restore_script_is_idempotent(self):
