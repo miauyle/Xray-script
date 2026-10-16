@@ -54,6 +54,14 @@
 
 ## 更新日志
 
+19. v2026.10.16.1 修复多机聚合后远端节点可能使用过期凭据的问题，增加多机 Provider 诊断。
+   1. Xray 配置成功更新后，如果已经生成过 Clash 订阅，自动重新生成本机的 `clash.yaml`、`proxies.yaml`、`multi_clash.yaml` 和 Shadowrocket 聚合订阅；刷新失败只警告，不回滚已成功运行的 Xray。
+   2. Mihomo 远端 Provider 从每小时刷新缩短到每 5 分钟；Shadowrocket 远端 Provider 缓存仍支持临时失败回退，但超过 12 小时不再将旧节点当作有效节点输出。
+   3. 新增多机菜单 **9. 诊断多机 Provider**，检查当前 VPS 的节点是否仍匹配 Xray UUID/Reality 公钥，并从本机网络访问每个远端 Provider，报告 HTTP/网络失败或缓存陈旧（不显示 Token、UUID 或密钥）。
+   4. 此版本无法替代真实客户端验证：如单独订阅可用、聚合不行，首先查看诊断输出，再分别在 VPS 上重生成配置，并在 Clash/Shadowrocket 中强制刷新订阅和 Provider。
+
+
+
 18. v2026.10.15.3 新增 Shadowrocket 单链接多 VPS 订阅：复用现有 Provider、MULTI_TOKEN，输出 `multi_nodes.txt`，自动转换 VLESS Reality/XHTTP，并通过缓存保留暂时不可用的远程节点。HTTP 动态聚合，Nginx 使用 5 分钟一次的 systemd 定时快照，无额外常驻聚合进程。
 
 
@@ -180,6 +188,16 @@ SNI 配置中，CDN 的分享链接 Alpn 默认为 H2，如有 H3 需求，请�
 远程订阅与 Xray 的 Vision/Reality/XHTTP 数据链路完全独立。已有 Nginx HTTPS 时 URL 形如 `https://domain/sub/<random-token>/clash.yaml`；没有可复用 HTTPS 站点时，可选择轻量 HTTP 后端。端口直接回车默认使用 `80`，也可手动输入 `1-65535` 的其他端口。80 端口时 URL 形如 `http://server-ip/sub/<random-token>/clash.yaml`；自定义端口时形如 `http://server-ip:<port>/sub/<random-token>/clash.yaml`。脚本不会自动替用户切换端口；所选端口被占用时会直接报错。HTTP 不加密，订阅内容又包含节点凭据，因此只应在你接受这一风险时使用；如果怀疑 URL 泄露，请立即旋转 Token。
 
 当前生成器支持 Vision+Reality、VLESS+XHTTP+Reality、Fallback 与 SNI 中的兼容 VLESS 节点。Mihomo 当前不支持 VLESS+mKCP 和 Trojan+XHTTP，脚本不会为这两类组合生成伪兼容配置。
+
+### 聚合后某台 VPS 节点失效：快速诊断
+
+如果副节点的单机 `clash.yaml` 能正常访问，但聚合后的节点延迟测试全部失败：
+
+1. 先在 **每台 VPS** 更新到 `v2026.10.16.1`，执行「Clash/Mihomo 配置与订阅 → 1. 生成/刷新配置」。这一步不更改 Xray 的密钥或服务器协议。
+2. 在聚合入口 VPS 执行「Clash/Mihomo 配置与订阅 → 6. 多服务器订阅管理 → 9. 诊断多机 Provider」（CLI：`bash core/clash.sh multi-doctor`，在已安装的项目内执行）。检查每个 `PASS/FAIL`：`HTTP 404` 通常是 Provider Token/发布路径不匹配；超时或连接错误优先检查订阅监听端口、防火墙与服务器间网络。
+3. 在**被引用的副 VPS** 也运行第 9 项：检查 `proxies.yaml` 与其 `clash.yaml` 是否一致、节点 UUID 与 Reality 公钥是否匹配当前 Xray。诊断不会打印私钥或完整 Provider URL。
+4. A、B 两端均修复后，在 Clash Verge Rev 中手工刷新 **Provider 本身** 和主订阅；在 Shadowrocket 中重新更新 `multi_nodes.txt` 订阅。注意 Mihomo 的 Provider 缓存与 Shadowrocket 的服务端缓存不是同一个缓存。
+5. 如果仍失败，请保留第 9 项的无凭据诊断输出与客户端日志，以便区分订阅抓取错误、旧节点凭据与真正的 Xray 握手故障。不要公开 `multi-server.json`、Token URL、Reality Private Key 或完整节点订阅。
 
 ### Shadowrocket 单链接多 VPS 订阅
 
