@@ -55,6 +55,10 @@
 
 ## Changelog
 
+19. v2026.10.16.1 fixes stale remote-node credentials in multi-server subscriptions. After a successful Xray regeneration, existing published single and multi subscriptions are refreshed without rolling back working Xray on refresh failure. Mihomo retries remote Providers every five minutes; Shadowrocket only falls back to cached remote nodes for up to 12 hours. Add **Multi-server subscriptions → 9. Diagnose Providers** to compare published UUID/Reality public keys with running Xray and verify remote Provider reachability without logging secrets. Clients must still refresh their subscriptions and Providers.
+
+
+
 18. v2026.10.15.3 adds a single Shadowrocket subscription URL for all VPS peers: reuse the existing peer list and MULTI_TOKEN, export Base64 VLESS Reality/XHTTP links, retain last-known-good remote nodes, and refresh Nginx snapshots with a five-minute one-shot timer.
 
 
