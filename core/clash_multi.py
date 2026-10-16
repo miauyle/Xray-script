@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build opt-in Mihomo multi-server subscriptions from the existing single-server YAML.
+"""Generate independent per-VPS Providers and optional center-only Mihomo subscriptions.
 
 Only the generated Clash YAML is read: this helper never modifies Xray's configuration.
 It uses the YAML layout emitted by core/clash.sh and only the Python standard library.
@@ -180,8 +180,11 @@ def render_files(single_yaml, peers):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", type=Path, required=True)
+    parser.add_argument("--config", type=Path)
     sub = parser.add_subparsers(dest="command", required=True)
+    provider_only = sub.add_parser("provider", help="Publish this VPS node list independently of any center")
+    provider_only.add_argument("--single", type=Path, required=True)
+    provider_only.add_argument("--provider", type=Path, required=True)
     generate = sub.add_parser("generate")
     generate.add_argument("--single", type=Path, required=True)
     generate.add_argument("--provider", type=Path, required=True)
@@ -196,7 +199,12 @@ def main():
     args = parser.parse_args()
 
     try:
-        if args.command == "generate":
+        if args.command == "provider":
+            provider_yaml, _ = render_files(args.single.read_text(encoding="utf-8"), [])
+            atomic_text(args.provider, provider_yaml)
+        elif args.command == "generate":
+            if args.config is None:
+                raise ValueError("--config is required for center management")
             config = load_config(args.config)
             if not config["enabled"]:
                 raise ValueError("Multi-server subscription is disabled")
@@ -206,11 +214,15 @@ def main():
             atomic_text(args.provider, provider_yaml)
             atomic_text(args.multi, multi_yaml)
         elif args.command == "show":
+            if args.config is None:
+                raise ValueError("--config is required for center management")
             # Do not echo token-bearing peer URLs in normal status output.
             config = load_config(args.config)
             print("enabled:", config["enabled"])
             print("peers:", ", ".join(p["name"] for p in config["peers"]) or "(none)")
         else:
+            if args.config is None:
+                raise ValueError("--config is required for center management")
             edit_config(args.config, args.command,
                         getattr(args, "name", None), getattr(args, "url", None))
     except (ValueError, OSError, json.JSONDecodeError) as exc:
