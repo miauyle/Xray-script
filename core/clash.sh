@@ -388,6 +388,8 @@ EOF_YAML
 
     mv -f "${temp_file}" "${CLASH_CONFIG_PATH}"
     chmod 600 "${CLASH_CONFIG_PATH}"
+    # Standalone node publication does not depend on a center.
+    single_generate_provider || fail "Could not create standalone Provider"
     if multi_is_enabled; then
         multi_generate_files || fail "Could not regenerate multi-server subscriptions"
     fi
@@ -482,7 +484,7 @@ function ensure_site_include() {
 }
 
 function write_nginx_subscription_config() {
-    local token="$1" multi_token provider_token next_token
+    local token="$1" multi_token
     mkdir -p "$(dirname "${NGINX_SUB_CONFIG}")"
     {
         echo '# Managed by Xray-script. Subscription URLs contain credentials.'
@@ -496,12 +498,18 @@ location = /sub/${token}/clash.yaml {
     add_header Cache-Control "no-store" always;
     add_header X-Content-Type-Options "nosniff" always;
 }
+location = /sub/${token}/proxies.yaml {
+    alias ${PROVIDER_YAML_PATH};
+    default_type text/yaml;
+    charset utf-8;
+    access_log off;
+    add_header Cache-Control "no-store" always;
+    add_header X-Content-Type-Options "nosniff" always;
+}
 EOF_NGINX
         fi
         if multi_is_enabled; then
             multi_token="$(multi_read_token "${MULTI_TOKEN_PATH}")"
-            provider_token="$(multi_read_token "${PROVIDER_TOKEN_PATH}")"
-            next_token="$(multi_read_token "${PROVIDER_NEXT_TOKEN_PATH}")"
             if [[ -n "$multi_token" ]]; then
                 cat <<EOF_NGINX
 location = /sub/${multi_token}/multi_clash.yaml {
@@ -525,20 +533,23 @@ location = /sub/${multi_token}/multi_nodes.txt {
 }
 EOF_NGINX
             fi
-            for token in "$provider_token" "$next_token"; do
-                if [[ -n "$token" ]]; then
-                    cat <<EOF_NGINX
+        fi
+        # Pre-existing Provider Tokens stay valid while upgrading old peers.
+        # New leaf VPSs only share their existing single-subscription Token.
+        for token in "$(multi_read_token "${PROVIDER_TOKEN_PATH}")" "$(multi_read_token "${PROVIDER_NEXT_TOKEN_PATH}")"; do
+            if [[ -n "$token" && "$token" != "$(current_token)" ]]; then
+                cat <<EOF_NGINX
 location = /sub/${token}/proxies.yaml {
     alias ${PROVIDER_YAML_PATH};
     default_type text/yaml;
+    charset utf-8;
     access_log off;
     add_header Cache-Control "no-store" always;
     add_header X-Content-Type-Options "nosniff" always;
 }
 EOF_NGINX
-                fi
-            done
-        fi
+            fi
+        done
     } >"${NGINX_SUB_CONFIG}"
 }
 
@@ -962,6 +973,7 @@ function show_info() {
     if [[ -s "${CLASH_TOKEN_PATH}" && -n "${backend}" ]]; then
         url="$(subscription_url 2>/dev/null || true)"
         [[ -n "${url}" ]] && echo "$(msg remote_url): ${url}"
+        echo "Standalone Provider: $(multi_url "$(current_token)" proxies.yaml)"
         echo "$(msg remote_backend): ${backend}"
         if [[ "${backend}" == 'http' ]]; then
             warn "$(msg http_warning)"
