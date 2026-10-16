@@ -503,6 +503,53 @@ function processes_bbr() {
     esac
 }
 
+function processes_host_firewall() {
+    exec_menu '--host-firewall'
+    local choose=$?
+    local port proto
+    case "${choose}" in
+    1|2)
+        read -r -p 'Port (1-65535): ' port
+        read -r -p 'Protocol [tcp/udp, default tcp]: ' proto
+        proto="${proto:-tcp}"
+        if [[ "${choose}" -eq 1 ]]; then
+            exec_handler '--host' 'firewall' 'status' "${port}" "${proto}"
+        else
+            exec_handler '--host' 'firewall' 'open' "${port}" "${proto}"
+        fi
+        ;;
+    *) return 0 ;;
+    esac
+}
+
+function processes_host_conntrack() {
+    exec_menu '--host-conntrack'
+    local choose=$? value
+    case "${choose}" in
+    1) exec_handler '--host' 'conntrack' 'status' ;;
+    2)
+        read -r -p 'conntrack_max [16384]: ' value
+        exec_handler '--host' 'conntrack' 'set' "${value:-16384}"
+        ;;
+    3) exec_handler '--host' 'conntrack' 'restore' ;;
+    *) return 0 ;;
+    esac
+}
+
+function processes_host_swap() {
+    exec_menu '--host-swap'
+    local choose=$? size
+    case "${choose}" in
+    1) exec_handler '--host' 'swap' 'status' ;;
+    2)
+        read -r -p 'Swap size in GiB (1-32): ' size
+        exec_handler '--host' 'swap' 'add' "${size}"
+        ;;
+    3) exec_handler '--host' 'swap' 'remove' ;;
+    *) return 0 ;;
+    esac
+}
+
 function processes_operations() {
     exec_menu '--operations'
     local choose=$(echo $?)
@@ -516,6 +563,9 @@ function processes_operations() {
     7) exec_handler '--import-config' ;;
     8) processes_direct_family ;;
     9) processes_bbr ;;
+    10) processes_host_firewall ;;
+    11) processes_host_conntrack ;;
+    12) processes_host_swap ;;
     *) return 0 ;;
     esac
 }
