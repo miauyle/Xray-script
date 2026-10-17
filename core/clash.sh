@@ -379,6 +379,11 @@ rules:
   # Reject common advertising domains (may occasionally block legitimate sites).
   - GEOSITE,category-ads-all,REJECT
 
+  # Apple services use global CDNs; route them directly even if IP is overseas.
+  # apple-cn also covers China-specific Apple download/service domains.
+  - GEOSITE,apple-cn,DIRECT
+  - GEOSITE,apple,DIRECT
+
   # Mainland-China services/domains/IPs stay direct.
   - GEOSITE,steam@cn,DIRECT
   - GEOSITE,microsoft@cn,DIRECT
