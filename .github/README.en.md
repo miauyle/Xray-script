@@ -55,6 +55,8 @@
 
 ## Changelog
 
+24. v2026.10.17.1 improves the compact Mihomo default routing rules. Route GEOSITE private and local-domain suffixes plus GEOIP private directly, then reject known ad domains, route mainland China domains/IPs directly, and use MATCH,Proxy for everything else. Replace GEOIP,lan with GEOIP,private and allow DNS resolution for GEOIP,CN. Standalone and center configurations inherit the same rules; no DNS/TUN overrides are added. Regenerate VPS YAML and refresh the client subscription to apply.
+
 23. v2026.10.16.5 adds center menu item 8 to list configured remote VPS labels and their full Provider URLs on demand. URL bearer tokens remain hidden from routine status output. No subscription changes.
 
 22. v2026.10.16.4 replaces equal-peer setup with a single center. Each standalone VPS independently publishes `proxies.yaml` under its original single subscription token; only the selected center stores peers. Old Provider token paths remain available during migration, but there is no new dedicated Provider token rotation.
