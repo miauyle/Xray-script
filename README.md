@@ -54,6 +54,8 @@
 
 ## 更新日志
 
+24. v2026.10.17.1 优化 Clash/Mihomo 默认路由规则：优先直连 `GEOSITE,private`、`.local`、`.lan`、`.home.arpa` 及 `GEOIP,private`（不强制解析），随后广告拦截、中国大陆域名与 IP 直连，最后 `MATCH,Proxy`。将不存在保障的 `GEOIP,lan` 改为 `GEOIP,private`，且 `GEOIP,CN,DIRECT` 允许按需 DNS 解析来识别国内 IP。**单机与中心聚合订阅共用该模板，不强行配置 DNS/TUN**。需在 VPS 重新生成 YAML 并在客户端刷新订阅后生效；如客户端出现额外 DNS 请求可视需要恢复 CN 规则的 `no-resolve`。
+
 23. v2026.10.16.5 中心聚合订阅菜单新增「8. 查看已添加子节点名称及完整 Provider URL」。仅主动选择该项时读取中心的 `multi-server.json` 并输出全部远端节点地址（包含 Token），不改变原有订阅、连接配置、普通 `show` 脱敏行为或中心列表。请勿公开该页面的完整 URL 或截图。
 
 22. v2026.10.16.4 将旧多机对等订阅简化为「唯一中心 + 普通 VPS 独立订阅」：普通 VPS 生成并发布 `clash.yaml`/`proxies.yaml`，共用原单机 Token；仅中心维护服务器列表和聚合订阅；删除旧 Provider Token 轮换菜单，旧 Token 暂时保持兼容。升级不自动改变任何机器的中心角色；按迁移说明手动关闭旧副中心。

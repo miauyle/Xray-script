@@ -369,17 +369,21 @@ EOF_YAML
 # Routing rules
 # =========================
 rules:
-  # Reject common advertising domains first.
-  - GEOSITE,category-ads-all,REJECT
+  # Local domains and private network destinations always go direct.
+  - GEOSITE,private,DIRECT
+  - DOMAIN-SUFFIX,local,DIRECT
+  - DOMAIN-SUFFIX,lan,DIRECT
+  - DOMAIN-SUFFIX,home.arpa,DIRECT
+  - GEOIP,private,DIRECT,no-resolve
 
-  # LAN/private destinations stay direct.
-  - GEOIP,lan,DIRECT,no-resolve
+  # Reject common advertising domains (may occasionally block legitimate sites).
+  - GEOSITE,category-ads-all,REJECT
 
   # Mainland-China services/domains/IPs stay direct.
   - GEOSITE,steam@cn,DIRECT
   - GEOSITE,microsoft@cn,DIRECT
   - GEOSITE,CN,DIRECT
-  - GEOIP,CN,DIRECT,no-resolve
+  - GEOIP,CN,DIRECT
 
   # Everything else follows the user-selected policy.
   - MATCH,Proxy
