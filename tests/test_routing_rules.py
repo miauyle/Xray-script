@@ -14,6 +14,8 @@ RULES = [
     "DOMAIN-SUFFIX,home.arpa,DIRECT",
     "GEOIP,private,DIRECT,no-resolve",
     "GEOSITE,category-ads-all,REJECT",
+    "GEOSITE,apple-cn,DIRECT",
+    "GEOSITE,apple,DIRECT",
     "GEOSITE,steam@cn,DIRECT",
     "GEOSITE,microsoft@cn,DIRECT",
     "GEOSITE,CN,DIRECT",
@@ -41,6 +43,9 @@ class MihomoRoutingRulesTests(unittest.TestCase):
     def test_rules_are_explicit_ordered_and_use_supported_categories(self):
         actual = emitted_routing_rules()
         self.assertEqual(actual, RULES)
+        self.assertLess(actual.index("GEOSITE,category-ads-all,REJECT"), actual.index("GEOSITE,apple-cn,DIRECT"))
+        self.assertLess(actual.index("GEOSITE,apple-cn,DIRECT"), actual.index("GEOSITE,CN,DIRECT"))
+        self.assertEqual(actual.count("GEOSITE,apple,DIRECT"), 1)
         self.assertNotIn("GEOIP,lan,DIRECT,no-resolve", actual)
         self.assertNotIn("GEOIP,CN,DIRECT,no-resolve", actual)
 
