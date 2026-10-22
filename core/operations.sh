@@ -372,6 +372,9 @@ function handler_logs() {
     echo "===== Xray systemd (last 80) ====="
     journalctl -u xray -n 80 --no-pager 2>/dev/null || true
     echo
+    echo "===== Xray access.log (last 80) ====="
+    [[ -f /var/log/xray/access.log ]] && tail -n 80 /var/log/xray/access.log || echo "(missing)"
+    echo
     echo "===== Xray error.log (last 80) ====="
     [[ -f /var/log/xray/error.log ]] && tail -n 80 /var/log/xray/error.log || echo "(missing)"
     echo
