@@ -2929,6 +2929,7 @@ function main() {
     --logs) handler_logs ;;
     --warp-status) handler_warp_status ;;
     --warp-reconnect) handler_warp_reconnect ;;
+    --warp-netadmin-repair) handler_warp_netadmin_repair ;;
     --warp-fallback) handler_warp_fallback ;;
     --backup-list) handler_backup_list ;;
     --backup-restore) handler_backup_restore ;;
