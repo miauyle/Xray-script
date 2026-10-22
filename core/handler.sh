@@ -1431,7 +1431,7 @@ function handler_xray_config() {
     case "${CONFIG_TAG,,}" in
     mkcp)
         # 更新 mKCP Seed
-        XRAY_CONFIG="$(echo "${XRAY_CONFIG}" | jq --arg seed "${KCP_SEED}" '.inbounds[1].streamSettings.kcpSettings.seed = $seed')"
+        XRAY_CONFIG="$(echo "${XRAY_CONFIG}" | jq --arg seed "${KCP_SEED}" '.inbounds[1].streamSettings.finalmask.udp[0].settings.value = $seed')"
         ;;
     vision | xhttp | trojan | fallback | sni)
         # 如果不是 sni 配置，更新 Reality 目标
