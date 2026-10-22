@@ -60,6 +60,7 @@ class WarpDiagnosticsTests(unittest.TestCase):
                 STUBS,
                 r"""curl() { echo 'curl: (97) connection to proxy closed' >&2; return 97; }""",
                 DIAGNOSTIC,
+                "ops_warp_tcp_listener() { return 0; }",
                 "handler_warp_status",
             ])
             result = run(script)
@@ -81,6 +82,7 @@ class WarpDiagnosticsTests(unittest.TestCase):
                 STUBS,
                 r"""curl() { printf 'ip=198.51.100.23\nloc=KR\nwarp=off\n'; }""",
                 DIAGNOSTIC,
+                "ops_warp_tcp_listener() { return 0; }",
                 "handler_warp_status",
             ])
             result = run(script)
