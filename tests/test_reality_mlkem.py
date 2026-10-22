@@ -42,6 +42,10 @@ def generate_nodes(server_version, script_version="v26.3.27"):
         "nginx": {"domain": "www.cloudflare.com"},
     }
     template = json.loads((ROOT / "config/xray/Fallback.json").read_text())
+    for inbound in template.get("inbounds", []):
+        for client in inbound.get("settings", {}).get("clients", []):
+            if "id" in client:
+                client["id"] = "123e4567-e89b-42d3-a456-426614174000"
     code = "\n".join([
         "SCRIPT_CONFIG=" + shlex.quote(json.dumps(config)),
         "XRAY_CONFIG=" + shlex.quote(json.dumps(template)),
