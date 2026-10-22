@@ -28,7 +28,7 @@ def function(name):
 with tempfile.TemporaryDirectory() as td:
     root = pathlib.Path(td)
     installed = root / "config.json"
-    backup = root / "backup.json"
+    backup = root / "config-previous.json"
     old = {"log": {"loglevel": "warning"}, "outbounds": [
         {"tag": "old", "protocol": "freedom"}]}
     current = {"log": {"loglevel": "warning"}, "outbounds": [
