@@ -1989,7 +1989,14 @@ function xray_install_verified() {
     fi
     systemctl -q is-active xray >/dev/null 2>&1 && was_running=1
 
-    if ! bash "$installer" install --local "$archive"; then
+    # Updating the core must not silently rewrite an existing systemd unit.
+    # The official installer supports --no-update-service for this purpose.
+    local -a installer_args=(install --local "$archive")
+    local service_file="${XRAY_SERVICE_FILE_PATH:-/etc/systemd/system/xray.service}"
+    if [[ -f "$service_file" ]]; then
+        installer_args+=(--no-update-service)
+    fi
+    if ! bash "$installer" "${installer_args[@]}"; then
         failure="Official Xray installer failed"
     else
         result="$(xray_installed_version 2>/dev/null || true)"

@@ -54,6 +54,8 @@
 
 ## 更新日志
 
+26. v2026.10.22.2 修复 Xray-core 更新使用官方安装器时传入过时的 `-u root` 参数，导致“最新版”和“自选版”均报 `unknown option -- -`；升级现改为调用官方支持的 `install --local <zip>`，对已有 systemd 服务附加 `--no-update-service`，避免更换服务运行用户或覆盖自定义配置。新增严格参数与服务保留回归测试。
+
 25. v2026.10.17.2 默认 Mihomo 分流规则增加 Apple 直连：在广告拦截之后、中国大陆规则之前加入 `GEOSITE,apple-cn,DIRECT` 和 `GEOSITE,apple,DIRECT`，覆盖 App Store、iCloud、系统更新等苹果域名及中国特定分发域名。苹果服务即使落到境外 CDN，也不再因为 `MATCH,Proxy` 默认走代理。单机 `clash.yaml` 与中心 `multi_clash.yaml` 一并生效，Shadowrocket 节点订阅不受影响。升级后需要重新生成中心 YAML，并在 Clash Verge Rev 刷新订阅；部分区域限制服务可能需要按需覆盖。
 
 24. v2026.10.17.1 优化 Clash/Mihomo 默认路由规则：优先直连 `GEOSITE,private`、`.local`、`.lan`、`.home.arpa` 及 `GEOIP,private`（不强制解析），随后广告拦截、中国大陆域名与 IP 直连，最后 `MATCH,Proxy`。将不存在保障的 `GEOIP,lan` 改为 `GEOIP,private`，且 `GEOIP,CN,DIRECT` 允许按需 DNS 解析来识别国内 IP。**单机与中心聚合订阅共用该模板，不强行配置 DNS/TUN**。需在 VPS 重新生成 YAML 并在客户端刷新订阅后生效；如客户端出现额外 DNS 请求可视需要恢复 CN 规则的 `no-resolve`。
