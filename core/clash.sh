@@ -129,6 +129,27 @@ function xray_reality_compat_warning() {
     fi
 }
 
+# REALITY in Xray >= 26.9.8 requires an X25519MLKEM768 key share before
+# X25519. Older server cores may reject that client handshake: do not turn
+# this Mihomo-specific compatibility setting on unconditionally.
+# The *installed* server binary is authoritative, not the cached script state.
+function xray_reality_needs_mlkem() {
+    local output='' version='' major=0 minor=0 patch=0
+    if ! output="$(xray version 2>/dev/null)"; then
+        warn 'Cannot identify installed Xray version; skipping REALITY ML-KEM flag'
+        return 1
+    fi
+    version="$(awk 'NR == 1 && $1 == "Xray" {print $2}' <<<"$output")"
+    if [[ ! "$version" =~ ^v?([0-9]+)\.([0-9]+)\.([0-9]+)([-.+].*)?$ ]]; then
+        warn 'Unknown Xray version; skipping REALITY ML-KEM flag'
+        return 1
+    fi
+    major="${BASH_REMATCH[1]}"
+    minor="${BASH_REMATCH[2]}"
+    patch="${BASH_REMATCH[3]}"
+    (( 10#$major > 26 || (10#$major == 26 && (10#$minor > 9 || (10#$minor == 9 && 10#$patch >= 8))) ))
+}
+
 function append_vless_reality_node() {
     local name="$1"
     local inbound_index="$2"
@@ -163,6 +184,10 @@ function append_vless_reality_node() {
     PROXY_BUFFER+="    reality-opts:\n"
     PROXY_BUFFER+="      public-key: $(yaml_quote "${public_key}")\n"
     PROXY_BUFFER+="      short-id: $(yaml_quote "${short_id}")\n"
+    # Valid for Mihomo REALITY clients only; not Xray server-side JSON.
+    if [[ "${XRAY_MLKEM_REQUIRED:-0}" == 1 ]]; then
+        PROXY_BUFFER+="      support-x25519mlkem768: true\n"
+    fi
 
     if [[ "${network}" == 'xhttp' ]]; then
         path="$(inbound_value "${inbound_index}" '.streamSettings.xhttpSettings.path')"
@@ -269,6 +294,10 @@ function generate_yaml() {
     chmod 700 "${CLASH_DIR}"
     NODE_NAMES=()
     PROXY_BUFFER=''
+    XRAY_MLKEM_REQUIRED=0
+    if xray_reality_needs_mlkem; then
+        XRAY_MLKEM_REQUIRED=1
+    fi
     build_nodes
     ((${#NODE_NAMES[@]} > 0)) || fail "$(msg no_supported_nodes)"
 
