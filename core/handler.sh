@@ -2105,10 +2105,10 @@ function handler_install() {
         # On failure, keep both the old executable and the last installed version
         # recorded in config.json; never report a failed update as successful.
         if ! xray_install_verified "$desired"; then
-            if [[ -n "$current" ]]; then
-                SCRIPT_CONFIG="$(echo "$SCRIPT_CONFIG" | jq --arg v "$current" '.xray.version = $v')" || return 1
-                persist_script_config
-            fi
+            # A fresh installation has no previous version; clear any version
+            # preselected by the interactive installer if installation failed.
+            SCRIPT_CONFIG="$(echo "$SCRIPT_CONFIG" | jq --arg v "$current" '.xray.version = $v')" || return 1
+            persist_script_config
             return 1
         fi
     fi
