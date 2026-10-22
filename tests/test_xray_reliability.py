@@ -86,7 +86,7 @@ class XrayReliabilityTests(unittest.TestCase):
             digest = root / "release.zip.dgst"
             digest.write_text("SHA256= " + hashlib.sha256(archive.read_bytes()).hexdigest() + "\n")
             script = "\n".join([
-                "XRAY_BINARY_PATH=" + shlex.quote(str(binary)),
+                "export XRAY_BINARY_PATH=" + shlex.quote(str(binary)),
                 "XRAY_CONFIG_PATH=" + shlex.quote(str(config)),
                 "XRAY_SERVICE_FILE_PATH=" + shlex.quote(str(root / "no-service")),
                 "FIXTURE_ZIP=" + shlex.quote(str(archive)),
