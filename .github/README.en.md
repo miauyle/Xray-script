@@ -55,6 +55,8 @@
 
 ## Changelog
 
+27. v2026.10.22.3 hardens Xray-core upgrades: generated templates log to stdout/systemd journal rather than writable files, avoiding stale access.log/error.log ownership failures; validation failures now show the underlying Xray error without dumping the candidate configuration. Core upgrades verify the previously installed configuration, restart an already-running service, check that it survives two seconds, and restore the old binary on failure. CI adds regression tests plus actual v26.3.27/v26.10.21 binary/template smoke checks. Existing configurations and logs are not automatically overwritten or deleted by a script update.
+
 25. v2026.10.17.2 adds `GEOSITE,apple-cn,DIRECT` and `GEOSITE,apple,DIRECT` to generated Mihomo routing between ad blocking and China rules, covering App Store, iCloud and Apple updates even when overseas CDN IPs are used. Both standalone and central aggregate subscriptions inherit this change. Refresh YAML on the center and reload Clash Verge Rev to apply; Shadowrocket node-only subscriptions are unaffected. Some region-sensitive services may still need a targeted rule override.
 
 24. v2026.10.17.1 improves the compact Mihomo default routing rules. Route GEOSITE private and local-domain suffixes plus GEOIP private directly, then reject known ad domains, route mainland China domains/IPs directly, and use MATCH,Proxy for everything else. Replace GEOIP,lan with GEOIP,private and allow DNS resolution for GEOIP,CN. Standalone and center configurations inherit the same rules; no DNS/TUN overrides are added. Regenerate VPS YAML and refresh the client subscription to apply.
