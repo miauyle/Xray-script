@@ -81,9 +81,10 @@
         "finalmask": {
           "udp": [
             {
-              "type": "mkcp-aes128gcm",
+              "type": "mkcp-legacy",
               "settings": {
-                "password": "{{ speed }}"
+                "header": "",
+                "value": "{{ speed }}"
               }
             }
           ]
