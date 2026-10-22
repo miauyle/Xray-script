@@ -3,7 +3,8 @@
 function xray_mkcp_select_mask() {
     local candidate="$1" binary="${XRAY_BINARY_PATH:-/usr/local/bin/xray}"
     local work='' alternate=''
-    work="$(mktemp)" || return 1
+    # Xray >= 26.10 rejects extensionless config paths even with -format=json.
+    work="$(mktemp --suffix=.json)" || return 1
     chmod 600 "$work" || { rm -f "$work"; return 1; }
     if ! printf '%s\n' "$candidate" >"$work"; then
         rm -f "$work"
