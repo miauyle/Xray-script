@@ -1989,7 +1989,7 @@ function xray_install_verified() {
     fi
     systemctl -q is-active xray >/dev/null 2>&1 && was_running=1
 
-    if ! bash "$installer" install -u root --local "$archive"; then
+    if ! bash "$installer" install --local "$archive"; then
         failure="Official Xray installer failed"
     else
         result="$(xray_installed_version 2>/dev/null || true)"
