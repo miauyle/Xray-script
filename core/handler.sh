@@ -2000,8 +2000,11 @@ function xray_install_verified() {
         if [[ -n "$old_binary" ]]; then
             # Replace by rename, not by writing into a potentially running binary
             # (which can fail with ETXTBSY and leave the service unusable).
-            local restore_path="${binary}.rollback.$"
-            if cp -p -- "$old_binary" "$restore_path" && mv -f -- "$restore_path" "$binary"; then
+            local restore_path=''
+            if ! restore_path="$(mktemp "${binary}.rollback.XXXXXX")"; then
+                echo "CRITICAL: Unable to stage Xray rollback (backup: $old_binary)" >&2
+                restore_failed=1
+            elif cp -p -- "$old_binary" "$restore_path" && mv -f -- "$restore_path" "$binary"; then
                 if [[ "$was_running" -eq 1 ]]; then
                     systemctl restart xray || echo "CRITICAL: Unable to restart the previous Xray core" >&2
                 fi
