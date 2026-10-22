@@ -4,6 +4,9 @@
 
 这里归档历史版本细节；主页只展示最近的重要变更。旧版本编号顺序按原记录保留，不代表严格的发布时间排序。
 
+32. v2026.10.22.8 修复新版 Cloudflare WARP Proxy 反复 `Connecting`/`FirewallRepairFailed` 的确定性权限问题：WARP 需重装 `fwmark` 策略路由时，缺失 Linux `CAP_NET_ADMIN` 会报 `Operation not permitted`。Docker 新建容器仅增加 `--cap-add=NET_ADMIN`（不用 `--privileged`），现有容器诊断显示缺失能力并标出 Doctor 故障；运维菜单新增第 14 项手动确认修复已有容器：只迁移识别为脚本默认配置的容器，保留已停用原容器及注册目录，使用相同镜像重新创建，若容器 IP 变化则事务式更新 Xray WARP 出站，出错尝试回滚。增加迁移/回滚测试。不自动重建、不切换 WireGuard。Cloudflare 上游网络故障仍需另查。
+
+
 31. v2026.10.22.7 修复 WARP 诊断函数重复定义；分开显示客户端连接状态、SOCKS TCP 端口、真实代理请求、`warp=on` 与 curl 错误，并提供两次有限检测。新增运维菜单第 13 项「WARP 轻量重连」：用户输入 `yes` 才执行 WARP 客户端断开/重连；保留注册文件、容器、Xray 配置和订阅，不自动切换 MASQUE/WireGuard。仅增强诊断与人工恢复，不保证修复上游网络故障。
 
 
