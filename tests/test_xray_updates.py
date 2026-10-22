@@ -22,7 +22,7 @@ def production_function(name):
     return match.group(0)
 
 
-FUNCTIONS = "\n".join(
+FUNCTIONS = "xray_prepare_log_files() { return 0; }\n" + "\n".join(
     production_function(name)
     for name in (
         "xray_resolve_version",

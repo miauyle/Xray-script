@@ -27,15 +27,14 @@ def run_shell(script):
 
 
 class XrayReliabilityTests(unittest.TestCase):
-    def test_every_generated_template_logs_to_journald(self):
-        # On systemd stdout/stderr go to journalctl. No writable logfile is
-        # required from nobody/root, and stale log ownership cannot block startup.
+    def test_every_generated_template_has_persistent_file_logs(self):
+        # Preserve the user's access/error logs for future diagnosis.
         for path in (ROOT / "config" / "xray").glob("*.json"):
             with self.subTest(template=path.name):
                 data = json.loads(path.read_text(encoding="utf-8"))
                 self.assertEqual(data["log"].get("loglevel"), "warning")
-                self.assertNotIn("access", data["log"])
-                self.assertNotIn("error", data["log"])
+                self.assertEqual(data["log"]["access"], "/var/log/xray/access.log")
+                self.assertEqual(data["log"]["error"], "/var/log/xray/error.log")
 
     def test_invalid_candidate_preserves_original_and_prints_real_error(self):
         with tempfile.TemporaryDirectory() as td:
@@ -60,6 +59,7 @@ class XrayReliabilityTests(unittest.TestCase):
     def test_fast_crashing_service_is_not_accepted_as_healthy(self):
         script = "\n".join([
             "CHECKS=0",
+            "xray_prepare_log_files() { return 0; }",
             "systemctl() {",
             '  if [[ "$*" == *"is-active"* ]]; then',
             '    CHECKS=$((CHECKS+1))',
@@ -91,6 +91,7 @@ class XrayReliabilityTests(unittest.TestCase):
                 "XRAY_SERVICE_FILE_PATH=" + shlex.quote(str(root / "no-service")),
                 "FIXTURE_ZIP=" + shlex.quote(str(archive)),
                 "FIXTURE_DIGEST=" + shlex.quote(str(digest)),
+                "xray_prepare_log_files() { return 0; }",
                 r"""curl() {
   local dest=''
   while (($#)); do

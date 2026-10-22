@@ -45,6 +45,13 @@ for i, template in enumerate(sorted((ROOT / "config" / "xray").glob("*.json"))):
         if "xhttpSettings" in stream:
             stream["xhttpSettings"]["path"] = "/test-xhttp"
     with tempfile.TemporaryDirectory() as td:
+        logdir = pathlib.Path(td) / "logs"
+        logdir.mkdir()
+        for name in ("access", "error"):
+            expected = f"/var/log/xray/{name}.log"
+            if obj["log"].get(name) != expected:
+                raise AssertionError(f"{template.name} missing {expected}")
+            obj["log"][name] = str(logdir / f"{name}.log")
         cfg = pathlib.Path(td) / "config.json"
         cfg.write_text(json.dumps(obj), encoding="utf-8")
         if template.name == "mKCP.json":
@@ -81,4 +88,7 @@ for i, template in enumerate(sorted((ROOT / "config" / "xray").glob("*.json"))):
             except subprocess.TimeoutExpired:
                 proc.kill()
                 proc.communicate(timeout=5)
-        print(f"PASS {template.name}: config and 2-second process health")
+        for name in ("access.log", "error.log"):
+            if not (logdir / name).is_file():
+                raise AssertionError(f"{template.name}: missing persistent {name}")
+        print(f"PASS {template.name}: config, persistent logs, 2-second process health")
