@@ -11,8 +11,7 @@
 适用于已具备管理权限的 Linux VPS。先确认 SSH 与云服务商防火墙规则可用，建议在全新或已备份的环境安装。
 
 ```bash
-wget -O "$HOME/Xray-script.sh" https://raw.githubusercontent.com/miauyle/Xray-script/main/install.sh
-bash "$HOME/Xray-script.sh"
+wget -O "$HOME/Xray-script.sh" https://raw.githubusercontent.com/miauyle/Xray-script/main/install.sh && bash "$HOME/Xray-script.sh"
 ```
 
 直接安装指定配置（替换启动命令即可）：
