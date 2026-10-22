@@ -1938,7 +1938,7 @@ function xray_installed_version() {
 # download path reselecting a different (possibly older stable) release.
 function xray_install_verified() {
     local version="$1" machine='' url='' expected='' actual='' result='' failure=''
-    local work='' archive='' digest='' installer='' old_binary='' was_running=0
+    local work='' archive='' digest='' installer='' old_binary='' was_running=0 restore_failed=0
     local binary="${XRAY_BINARY_PATH:-/usr/local/bin/xray}"
     case "$(uname -m)" in
     x86_64 | amd64) machine='64' ;;
@@ -2007,12 +2007,17 @@ function xray_install_verified() {
                 fi
             else
                 echo "CRITICAL: Unable to restore $binary (backup: $old_binary)" >&2
+                restore_failed=1
                 rm -f -- "$restore_path"
             fi
         elif [[ -f "$binary" ]]; then
             rm -f -- "$binary"
         fi
-        rm -rf -- "$work"
+        if [[ "$restore_failed" -eq 1 ]]; then
+            echo "CRITICAL: Backup retained at $old_binary; restore it manually." >&2
+        else
+            rm -rf -- "$work"
+        fi
         return 1
     fi
     rm -rf -- "$work"
