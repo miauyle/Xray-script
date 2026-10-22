@@ -742,7 +742,7 @@ function rollback_xray_config() {
     local temp_config
 
     [[ -f "${backup_path}" ]] || return 1
-    temp_config="$(mktemp "${XRAY_CONFIG_PATH}.rollback.XXXXXX")" || return 1
+    temp_config="$(mktemp --suffix=.json "${XRAY_CONFIG_PATH}.rollback.XXXXXX")" || return 1
     cp -p "${backup_path}" "${temp_config}" || { rm -f "${temp_config}"; return 1; }
 
     if ! xray run -test -format=json -c "${temp_config}" >/dev/null 2>&1; then
@@ -785,7 +785,7 @@ function apply_xray_config() {
     local temp_config
     LAST_XRAY_BACKUP=''
 
-    temp_config="$(mktemp "${XRAY_CONFIG_PATH}.tmp.XXXXXX")" ||
+    temp_config="$(mktemp --suffix=.json "${XRAY_CONFIG_PATH}.tmp.XXXXXX")" ||
         _error "Failed to create temporary Xray config [${context}]"
 
     if ! printf '%s\n' "${XRAY_CONFIG}" >"${temp_config}"; then
