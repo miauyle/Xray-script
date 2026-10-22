@@ -194,7 +194,8 @@
       "option10": "防火墙与端口检查",
       "option11": "conntrack_max 管理",
       "option12": "Swap 管理",
-      "option13": "WARP 轻量重连（保留注册数据，需确认）"
+      "option13": "WARP 轻量重连（保留注册数据，需确认）",
+      "option14": "修复 WARP 容器 NET_ADMIN 权限（保留注册，需确认）"
     },
     "direct_family": {
       "title": "Direct 出口 IP family"
