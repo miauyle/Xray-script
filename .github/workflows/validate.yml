@@ -20,6 +20,7 @@ jobs:
         run: |
           bash -n install.sh
           bash -n core/generate.sh
+          bash -n core/xray_mkcp_compat.sh
           bash -n core/handler.sh
           bash -n core/main.sh
           bash -n core/menu.sh
