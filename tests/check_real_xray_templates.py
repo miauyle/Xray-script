@@ -20,6 +20,10 @@ if not match:
     raise RuntimeError("Unable to parse private key from Xray x25519 output")
 private_key = match.group(1)
 
+# SNI template expects the Nginx UDS directory created by the full installer.
+# Provide it in this isolated Linux runner without modifying the template.
+pathlib.Path("/dev/shm/nginx").mkdir(parents=True, exist_ok=True)
+
 for i, template in enumerate(sorted((ROOT / "config" / "xray").glob("*.json"))):
     obj = json.loads(template.read_text(encoding="utf-8"))
     for j, inbound in enumerate(obj.get("inbounds", [])):
