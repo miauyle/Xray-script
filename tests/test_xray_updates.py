@@ -110,33 +110,41 @@ curl() {
     case "$target" in
         *.zip) cp "$FIXTURE_ZIP" "$target" ;;
         *.dgst) cp "$FIXTURE_DIGEST" "$target" ;;
-        */install-release.sh) printf '# test installer\\n' > "$target" ;;
+        */install-release.sh)
+            # Faithful subset of upstream Xray-install argument parsing.
+            # A real child shell executes this installer; unsupported -u root
+            # must fail rather than being silently accepted by a Bash mock.
+            cat > "$target" <<'INSTALLER'
+#!/usr/bin/env bash
+[[ "$#" -eq 3 && "$1" == install && "$2" == --local && -s "$3" ]] || {
+    echo 'unknown installer arguments' >&2
+    exit 64
+}
+printf '#!/bin/sh\\necho "Xray 26.10.21"\\n' > "$XRAY_BINARY_PATH"
+chmod +x "$XRAY_BINARY_PATH"
+[[ "$MOCK_INSTALL_FAIL" != 1 ]]
+INSTALLER
+            ;;
         *) return 88 ;;
     esac
 }
 systemctl() { return 1; }
-bash() {
-    [[ "$1" == */install-release.sh && "$2" == 'install' && "$5" == '--local' ]] || return 89
-    printf '#!/bin/sh\\necho "Xray 26.10.21"\\n' > "$XRAY_BINARY_PATH"
-    chmod +x "$XRAY_BINARY_PATH"
-    [[ "$MOCK_INSTALL_FAIL" != 1 ]]
-}
 """
             base = "\n".join([
                 "declare -A CONFIG_DATA=()",
-                "XRAY_BINARY_PATH=" + shlex.quote(str(old)),
+                "export XRAY_BINARY_PATH=" + shlex.quote(str(old)),
                 "FIXTURE_ZIP=" + shlex.quote(str(archive)),
                 "FIXTURE_DIGEST=" + shlex.quote(str(digest)),
                 stubs,
                 FUNCTIONS,
             ])
-            success = run_bash(base + '\nMOCK_INSTALL_FAIL=0\nxray_install_verified v26.10.21 || exit 40\n'
+            success = run_bash(base + '\nexport MOCK_INSTALL_FAIL=0\nxray_install_verified v26.10.21 || exit 40\n'
                                       '[[ "$(xray_installed_version)" == "v26.10.21" ]] || exit 41\n')
             self.assertEqual(success.returncode, 0, success.stderr)
 
             old.write_text('#!/bin/sh\necho "Xray 26.3.27"\n')
             old.chmod(0o755)
-            failed = run_bash(base + '\nMOCK_INSTALL_FAIL=1\n'
+            failed = run_bash(base + '\nexport MOCK_INSTALL_FAIL=1\n'
                                      'if xray_install_verified v26.10.21; then exit 42; fi\n'
                                      '[[ "$(xray_installed_version)" == "v26.3.27" ]] || exit 43\n')
             self.assertEqual(failed.returncode, 0, failed.stderr)
