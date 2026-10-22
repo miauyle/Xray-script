@@ -713,6 +713,9 @@ function print_xray_service_diagnostics() {
 
 function restart_xray_service_checked() {
     local attempt
+    # Check as the actual systemd service user before touching the running
+    # process, including when older root-owned logs survived a reinstall.
+    xray_prepare_log_files "${XRAY_CONFIG_PATH:-/usr/local/etc/xray/config.json}" || return 1
 
     if systemctl -q is-active xray 2>/dev/null; then
         systemctl restart xray >/dev/null 2>&1 || return 1
@@ -812,6 +815,16 @@ function apply_xray_config() {
             { rm -f "${temp_config}"; _error "Failed to preserve Xray config permissions [${context}]"; }
         chown --reference="${XRAY_CONFIG_PATH}" "${temp_config}" ||
             { rm -f "${temp_config}"; _error "Failed to preserve Xray config ownership [${context}]"; }
+    fi
+
+    # Repair log permissions before changing the active config. If the service
+    # identity cannot write logs, do not disturb the currently working config.
+    if ! xray_prepare_log_files "${temp_config}"; then
+        rm -f "${temp_config}"
+        if [[ "${context}" == xray:regenerate* ]]; then
+            restore_pending_script_config || true
+        fi
+        _error "Xray log preparation failed; original configuration remains [${context}]"
     fi
 
     backup_xray_config "${context}"
@@ -2006,6 +2019,13 @@ function xray_install_verified() {
         cp -p -- "$binary" "$old_binary" || { rm -rf -- "$work"; return 1; }
     fi
     systemctl -q is-active xray >/dev/null 2>&1 && was_running=1
+    # Before the official installer can restart a previously working service,
+    # ensure the existing log files remain writable for its configured User.
+    if [[ -f "$config_path" ]] && ! xray_prepare_log_files "$config_path"; then
+        echo "error: Xray log preflight failed; core upgrade aborted." >&2
+        rm -rf -- "$work"
+        return 1
+    fi
 
     # Updating the core must not silently rewrite an existing systemd unit.
     # The official installer supports --no-update-service for this purpose.
@@ -2017,8 +2037,15 @@ function xray_install_verified() {
     if ! bash "$installer" "${installer_args[@]}"; then
         failure="Official Xray installer failed"
     else
+        # Fresh installs may create the unit with a new User/Group, while
+        # existing installs may keep a custom unit. Re-read actual identity.
+        if [[ -f "$config_path" ]] && ! xray_prepare_log_files "$config_path"; then
+            failure="Xray log preparation failed after core installation"
+        fi
         result="$(xray_installed_version 2>/dev/null || true)"
-        if [[ "$result" != "$version" ]]; then
+        if [[ -n "$failure" ]]; then
+            :
+        elif [[ "$result" != "$version" ]]; then
             failure="Xray version check failed (expected $version, got ${result:-none})"
         elif [[ -n "$old_binary" && -f "$config_path" ]]; then
             # A new Xray binary must accept the existing live configuration.
@@ -2193,9 +2220,13 @@ function handler_purge() {
 # 返回值: 无 (通过 systemctl 命令执行操作)
 # =============================================================================
 function handler_start() {
-    # 检查 Xray 服务是否活跃，如果不活跃则启动
-    systemctl -q is-active xray || systemctl -q start xray
-    # 检查 Xray 服务是否已启用，如果未启用则启用
+    # Do not restart an already-running service for a start-only request.
+    if ! systemctl -q is-active xray 2>/dev/null; then
+        if ! restart_xray_service_checked; then
+            print_xray_service_diagnostics
+            _error "Xray service start failed"
+        fi
+    fi
     systemctl -q is-enabled xray || systemctl -q enable xray
 }
 
@@ -2825,6 +2856,7 @@ function handler_quick_install() {
 
 # 运维扩展依赖本文件中已经定义的 apply/backup/WARP helper。
 source "${CUR_DIR}/xray_mkcp_compat.sh"
+source "${CUR_DIR}/xray_logs.sh"
 source "${OPERATIONS_PATH}"
 source "${CUR_DIR}/bbr.sh"
 source "${CUR_DIR}/host_tuning.sh"
