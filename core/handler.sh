@@ -723,7 +723,11 @@ function restart_xray_service_checked() {
     systemctl -q is-enabled xray 2>/dev/null || systemctl enable xray >/dev/null 2>&1 || true
 
     for attempt in 1 2 3 4 5; do
-        systemctl -q is-active xray 2>/dev/null && return 0
+        if systemctl -q is-active xray 2>/dev/null; then
+            # A just-started unit can appear active and crash a moment later.
+            sleep 2
+            systemctl -q is-active xray 2>/dev/null && return 0
+        fi
         sleep 0.4
     done
     return 1
@@ -786,7 +790,11 @@ function apply_xray_config() {
         _error "Failed to stage Xray configuration [${context}]"
     fi
 
-    if ! xray run -test -format=json -c "${temp_config}" >/dev/null 2>&1; then
+    local validation_output=''
+    if ! validation_output="$(xray run -test -format=json -c "${temp_config}" 2>&1)"; then
+        # The failing option / unsupported protocol is needed for diagnosis.
+        # Do not print the candidate JSON (it contains REALITY private keys).
+        printf 'Xray validation details [%s]:\n%s\n' "${context}" "${validation_output}" >&2
         rm -f "${temp_config}"
         if [[ -f "${XRAY_CONFIG_PATH}" ]]; then
             XRAY_CONFIG="$(jq '.' "${XRAY_CONFIG_PATH}")"
@@ -1943,6 +1951,7 @@ function xray_installed_version() {
 function xray_install_verified() {
     local version="$1" machine='' url='' expected='' actual='' result='' failure=''
     local work='' archive='' digest='' installer='' old_binary='' was_running=0 restore_failed=0
+    local config_path="${XRAY_CONFIG_PATH:-/usr/local/etc/xray/config.json}" validation_output=''
     local binary="${XRAY_BINARY_PATH:-/usr/local/bin/xray}"
     case "$(uname -m)" in
     x86_64 | amd64) machine='64' ;;
@@ -2002,8 +2011,25 @@ function xray_install_verified() {
         result="$(xray_installed_version 2>/dev/null || true)"
         if [[ "$result" != "$version" ]]; then
             failure="Xray version check failed (expected $version, got ${result:-none})"
-        elif [[ "$was_running" -eq 1 ]] && ! systemctl -q is-active xray >/dev/null 2>&1; then
-            failure="Xray service is not active after installation"
+        elif [[ -n "$old_binary" && -f "$config_path" ]]; then
+            # A new Xray binary must accept the existing live configuration.
+            # In particular this catches breaking changes in prereleases.
+            if ! validation_output="$("$binary" run -test -format=json -c "$config_path" 2>&1)"; then
+                printf 'Xray %s rejected the existing config:\n%s\n' "$version" "$validation_output" >&2
+                failure="Installed Xray is incompatible with the existing configuration"
+            fi
+        fi
+        if [[ -z "$failure" && "$was_running" -eq 1 ]]; then
+            # Validate the new process, not the old process still marked active
+            # immediately after an installer-driven binary replacement.
+            if ! systemctl restart xray >/dev/null 2>&1; then
+                failure="Xray service restart failed after core upgrade"
+            else
+                sleep 2
+                if ! systemctl -q is-active xray >/dev/null 2>&1; then
+                    failure="Xray service exited shortly after core upgrade"
+                fi
+            fi
         fi
     fi
     if [[ -n "$failure" ]]; then
@@ -2017,7 +2043,16 @@ function xray_install_verified() {
                 restore_failed=1
             elif cp -p -- "$old_binary" "$restore_path" && mv -f -- "$restore_path" "$binary"; then
                 if [[ "$was_running" -eq 1 ]]; then
-                    systemctl restart xray || echo "CRITICAL: Unable to restart the previous Xray core" >&2
+                    if ! systemctl restart xray >/dev/null 2>&1; then
+                        echo "CRITICAL: Unable to restart the previous Xray core" >&2
+                        restore_failed=1
+                    else
+                        sleep 2
+                        if ! systemctl -q is-active xray >/dev/null 2>&1; then
+                            echo "CRITICAL: Previous Xray core did not stay active after rollback" >&2
+                            restore_failed=1
+                        fi
+                    fi
                 fi
             else
                 echo "CRITICAL: Unable to restore $binary (backup: $old_binary)" >&2
