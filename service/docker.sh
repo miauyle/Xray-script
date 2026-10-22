@@ -277,21 +277,48 @@ function build_warp() {
 # 返回值: 容器的 IP 地址 (echo 输出)，或无输出
 # =============================================================================
 function enable_warp() {
-    # 检查名为 xray-script-warp 的容器是否已在运行
-    if ! docker ps --format "{{.Names}}" | grep -q "^xray-script-warp\$"; then
-        # 打印开始启用的信息
+    local container_name='xray-script-warp'
+    local container_ip=''
+    local container_status=''
+    local attempt=0
+
+    # An already running container must return its IP as well. Previously the
+    # whole function was conditional on !docker ps and silently returned empty.
+    if docker container inspect "${container_name}" >/dev/null 2>&1; then
+        container_status="$(docker inspect --format='{{.State.Status}}' "${container_name}" 2>/dev/null)" ||
+            print_error "Cannot inspect existing WARP container"
+        if [[ "${container_status}" != 'running' ]]; then
+            print_info "Starting existing WARP container (was ${container_status})"
+            docker start "${container_name}" >&2 ||
+                print_error "Cannot restart existing WARP container; check docker logs ${container_name}"
+        fi
+    else
         print_info "$(echo "$I18N_DATA" | jq -r '.docker.warp.enable.start')"
-        # 创建 Cloudflare WARP 容器所需的目录
         mkdir -vp "${WARP_DIR}" >&2
-        # 使用 docker run 命令启动容器，失败则调用 print_error 退出
-        docker run -d --restart=always --name=xray-script-warp --log-driver json-file --log-opt max-size=100m --log-opt max-file=3 -v "${WARP_DIR}":/var/lib/cloudflare-warp:rw xray-script-warp >&2 || print_error "$(echo "$I18N_DATA" | jq -r '.docker.warp.build.fail')"
-        # 获取新启动容器的 IP 地址
-        local container_ip=$(get_container_ip xray-script-warp)
-        # 打印启用成功的消息，并包含容器 IP
-        print_info "$(echo "$I18N_DATA" | jq -r ".docker.warp.enable.success" | sed "s/\${container_ip}/${container_ip}/")"
-        # 输出容器 IP 地址
-        echo "${container_ip}"
+        docker run -d --restart=always --name="${container_name}" --log-driver json-file --log-opt max-size=100m --log-opt max-file=3 -v "${WARP_DIR}":/var/lib/cloudflare-warp:rw xray-script-warp >&2 ||
+            print_error "$(echo "$I18N_DATA" | jq -r '.docker.warp.build.fail')"
     fi
+
+    # Cloudflare WARP's first startup registers an account, exits and restarts.
+    # Wait for a running container with an actual IPv4 address rather than
+    # treating a momentary restart window as permanent failure.
+    while (( attempt < 20 )); do
+        container_status="$(docker inspect --format='{{.State.Running}}' "${container_name}" 2>/dev/null)" ||
+            container_status=''
+        container_ip="$(get_container_ip "${container_name}" 2>/dev/null)" ||
+            container_ip=''
+        if [[ "${container_status}" == 'true' && "${container_ip}" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]]; then
+            print_info "$(echo "$I18N_DATA" | jq -r ".docker.warp.enable.success" | sed "s/\${container_ip}/${container_ip}/")"
+            printf '%s\n' "${container_ip}"
+            return 0
+        fi
+        ((attempt += 1))
+        sleep 1
+    done
+
+    docker inspect --format='WARP container status={{.State.Status}}' "${container_name}" >&2 || true
+    docker logs --tail 40 "${container_name}" >&2 || true
+    print_error "WARP container has no running IPv4 address; inspect docker logs ${container_name}"
 }
 
 # =============================================================================
