@@ -477,6 +477,7 @@ function menu_operations() {
     echo -e "${GREEN}10.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.operations.option10")"
     echo -e "${GREEN}11.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.operations.option11")"
     echo -e "${GREEN}12.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.operations.option12")"
+    echo -e "${GREEN}13.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.operations.option13")"
     echo -e "------------------------------------------------------"
 }
 

@@ -193,7 +193,8 @@
       "option9": "TCP BBR 网络优化",
       "option10": "防火墙与端口检查",
       "option11": "conntrack_max 管理",
-      "option12": "Swap 管理"
+      "option12": "Swap 管理",
+      "option13": "WARP 轻量重连（保留注册数据，需确认）"
     },
     "direct_family": {
       "title": "Direct 出口 IP family"

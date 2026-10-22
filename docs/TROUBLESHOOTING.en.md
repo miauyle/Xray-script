@@ -29,6 +29,14 @@ sudo docker inspect xray-script-warp --format '{{.State.Status}} {{range .Networ
 
 Do not delete the WARP registration directory before collecting diagnostics.
 
+## WARP stuck Connecting / SOCKS connection closed
+
+A running Docker container and open TCP port 40001 do not prove WARP data-path health. Repeated `Connecting` and `curl: (97) connection to proxy closed` indicate a real outage.
+
+Operations & Diagnostics item 3 shows client connection stage, TCP listener, proxied HTTP requests and verified `warp=on` separately, with up to two bounded attempts. Item 13 offers an explicit `yes`-confirmed `warp-cli disconnect` / `connect` without deleting registration, container, Xray settings or subscriptions. WARP-dependent traffic may be interrupted briefly.
+
+Review `docker exec xray-script-warp warp-cli --accept-tos status`, `docker logs --tail 80 xray-script-warp`, MASQUE UDP/443 reachability and ISP path stability if still stuck. Do not automatically change tunnel protocol or delete registration. Xray traffic using Direct routes may remain unaffected.
+
 ## Centralized subscriptions fail
 
 Test each VPS's standalone node and `proxies.yaml` first, then inspect the center's Provider diagnostics. Regenerate subscriptions after changing credentials, and refresh subscriptions on clients. Subscription URLs contain bearer tokens and must stay private.

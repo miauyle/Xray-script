@@ -566,6 +566,7 @@ function processes_operations() {
     10) processes_host_firewall ;;
     11) processes_host_conntrack ;;
     12) processes_host_swap ;;
+    13) exec_handler '--warp-reconnect' ;;
     *) return 0 ;;
     esac
 }

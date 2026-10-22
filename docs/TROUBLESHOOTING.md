@@ -29,6 +29,23 @@ sudo docker inspect xray-script-warp --format '{{.State.Status}} {{range .Networ
 
 **不要在排障前随意删除 Docker 容器或 WARP 注册目录。**
 
+## WARP 长期 Connecting / SOCKS 连接被关闭
+
+容器 `running`、`172.17.0.2:40001` 端口可达不代表实际 WARP 数据通路可用。连续出现 `Connecting` 和 `curl: (97) connection to proxy closed`，应作为真实出口故障排查。
+
+「运维与诊断 → 3. WARP 状态与出口」现在分别显示连接阶段、SOCKS TCP 端口、代理 HTTP 请求与实际 `warp=on`；只进行两次有限探测，不修改配置。若持续失败，可使用「13. WARP 轻量重连」，手动输入 `yes` 才执行 `disconnect` / `connect`，保留原有 WARP 注册信息、Docker 容器、Xray 配置与订阅。依赖 WARP 的流量可能短暂中断。
+
+若仍然 Connecting，需检查 Docker 日志、Cloudflare MASQUE UDP/443 可达性与稳定性；请勿自动修改隧道协议或删除注册信息。
+
+```bash
+docker exec xray-script-warp warp-cli --accept-tos status
+docker exec xray-script-warp warp-cli --accept-tos settings
+docker logs --tail 80 xray-script-warp
+curl --noproxy '' --proxy socks5h://172.17.0.2:40001 -v --connect-timeout 5 --max-time 20 https://www.cloudflare.com/cdn-cgi/trace
+```
+
+如果 Xray 默认经 Direct 出口，只有特定规则走 WARP，那么 WARP 故障不一定意味着全部 Xray 节点不可用。
+
 ## 多机订阅节点不可用
 
 先测试各 VPS 的单机节点和 `proxies.yaml`，再检查中心的远端 Provider。多机菜单提供 Provider 诊断；更新 Xray 凭据后应重新生成订阅并在客户端刷新。订阅 URL 自带访问 Token，勿公开完整 URL。

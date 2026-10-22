@@ -193,7 +193,8 @@
       "option9": "TCP BBR network tuning",
       "option10": "Firewall and listener port checks",
       "option11": "conntrack_max management",
-      "option12": "Swap management"
+      "option12": "Swap management",
+      "option13": "Reconnect WARP (keeps registration; confirmation required)"
     },
     "direct_family": {
       "title": "Direct egress IP family"

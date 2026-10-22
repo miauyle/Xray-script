@@ -24,19 +24,35 @@ function ops_get_warp_container_ip() {
     docker inspect --format='{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' xray-script-warp 2>/dev/null
 }
 
-function ops_warp_trace() {
-    local container_ip="$1"
-    [[ -n "${container_ip}" ]] || return 1
+# A TCP listener does NOT prove a working SOCKS handshake or WARP tunnel.
+function ops_warp_tcp_listener() {
+    local ip="$1"
+    [[ "$ip" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || return 1
+    timeout 3 bash -c 'exec 3<>/dev/tcp/"$1"/40001' _ "$ip" 2>/dev/null
+}
 
-    # IMPORTANT:
-    # --noproxy '*' disables the explicitly configured proxy as well.
-    # Use an empty no-proxy list so environment NO_PROXY cannot bypass WARP.
-    curl --noproxy ""         --proxy "socks5h://${container_ip}:40001"         -fsS --max-time 10         https://www.cloudflare.com/cdn-cgi/trace 2>/dev/null
+# Optional second parameter captures curl's failure reason without dumping
+# verbose TLS output into the terminal or treating a failure as a valid trace.
+function ops_warp_trace() {
+    local container_ip="$1" error_file="${2:-/dev/null}"
+    [[ -n "${container_ip}" ]] || return 1
+    curl --noproxy "" --proxy "socks5h://${container_ip}:40001" \
+        -fsS --connect-timeout 4 --max-time 10 \
+        https://www.cloudflare.com/cdn-cgi/trace 2>"${error_file}"
+}
+
+function ops_warp_client_snapshot() {
+    docker exec xray-script-warp warp-cli --accept-tos status 2>/dev/null
 }
 
 function ops_warp_client_status() {
-    docker exec xray-script-warp warp-cli --accept-tos status 2>/dev/null |
+    ops_warp_client_snapshot |
         awk -F': ' '/^Status update:/{print $2; exit}'
+}
+
+function ops_warp_client_reason() {
+    ops_warp_client_snapshot |
+        awk -F': ' '/^Reason:/{print $2; exit}'
 }
 
 function ops_warp_client_mode() {
@@ -44,96 +60,107 @@ function ops_warp_client_mode() {
         awk -F'Mode: ' '/Mode:/{print $2; exit}'
 }
 
-function handler_warp_status() {
-    local configured container_state container_ip trace egress_ip country warp_state client_status client_mode
-
-    configured="$(echo "${SCRIPT_CONFIG}" | jq -r '.xray.warp // 0')"
-    echo "WARP configured : ${configured}"
-
-    if ! command -v docker >/dev/null 2>&1; then
-        echo "Docker          : unavailable"
-        return 0
-    fi
-
-    container_state="$(docker inspect -f '{{.State.Status}}' xray-script-warp 2>/dev/null || true)"
-    [[ -n "${container_state}" ]] || container_state='missing'
-    echo "Container       : ${container_state}"
-
-    if [[ "${container_state}" != 'running' ]]; then
-        return 0
-    fi
-
-    container_ip="$(ops_get_warp_container_ip || true)"
-    echo "Container IP    : ${container_ip:-unknown}"
-
-    client_status="$(ops_warp_client_status || true)"
-    client_mode="$(ops_warp_client_mode || true)"
-    echo "WARP client     : ${client_status:-unknown}"
-    echo "WARP mode       : ${client_mode:-unknown}"
-
-    trace="$(ops_warp_trace "${container_ip}" || true)"
-    if [[ -z "${trace}" ]]; then
-        echo "SOCKS reachable : failed"
-        echo "WARP data path  : failed"
-        echo "Direct fallback : $(echo "${SCRIPT_CONFIG}" | jq -r 'if (.xray.warp_fallback // 0) == 1 then "enabled" else "disabled" end')"
-        return 0
-    fi
-
-    egress_ip="$(printf '%s\n' "${trace}" | awk -F= '$1=="ip"{print $2; exit}')"
-    country="$(printf '%s\n' "${trace}" | awk -F= '$1=="loc"{print $2; exit}')"
-    warp_state="$(printf '%s\n' "${trace}" | awk -F= '$1=="warp"{print $2; exit}')"
-
-    echo "SOCKS reachable : ok"
-    echo "Egress IP       : ${egress_ip:-unknown}"
-    echo "Country         : ${country:-unknown}"
-    case "${warp_state}" in
-    on | plus)
-        echo "WARP data path  : ok (warp=${warp_state})"
-        ;;
-    *)
-        echo "WARP data path  : FAILED (warp=${warp_state:-unknown})"
-        ;;
-    esac
-    echo "Direct fallback : $(echo "${SCRIPT_CONFIG}" | jq -r 'if (.xray.warp_fallback // 0) == 1 then "enabled" else "disabled" end')"
+function ops_warp_direct_fallback_state() {
+    echo "${SCRIPT_CONFIG}" | jq -r \
+        'if (.xray.warp_fallback // 0) == 1 then "enabled" else "disabled" end'
 }
 
+# Observes the working data path; never changes daemon registration, mode,
+# WARP protocol, Xray configuration or container state.
 function handler_warp_status() {
-    local configured container_state container_ip trace egress_ip country warp_state
+    local configured container_state container_ip client_status client_reason client_mode
+    local trace='' egress_ip='' country='' warp_state='' error_file='' last_error=''
+    local attempt
 
     configured="$(echo "${SCRIPT_CONFIG}" | jq -r '.xray.warp // 0')"
     echo "WARP configured : ${configured}"
-
     if ! command -v docker >/dev/null 2>&1; then
         echo "Docker          : unavailable"
         return 0
     fi
 
     container_state="$(docker inspect -f '{{.State.Status}}' xray-script-warp 2>/dev/null || true)"
-    [[ -n "${container_state}" ]] || container_state='missing'
-    echo "Container       : ${container_state}"
-
-    if [[ "${container_state}" != 'running' ]]; then
-        return 0
-    fi
+    echo "Container       : ${container_state:-missing}"
+    [[ "${container_state}" == running ]] || return 0
 
     container_ip="$(ops_get_warp_container_ip || true)"
     echo "Container IP    : ${container_ip:-unknown}"
+    client_status="$(ops_warp_client_status || true)"
+    client_reason="$(ops_warp_client_reason || true)"
+    client_mode="$(ops_warp_client_mode || true)"
+    echo "WARP client     : ${client_status:-unknown}"
+    [[ -n "${client_reason}" ]] && echo "Connection stage: ${client_reason}"
+    echo "WARP mode       : ${client_mode:-unknown}"
 
-    trace="$(ops_warp_trace "${container_ip}" || true)"
+    if ops_warp_tcp_listener "${container_ip}"; then
+        echo "SOCKS TCP port  : reachable (not a SOCKS/data-path check)"
+    else
+        echo "SOCKS TCP port  : unreachable"
+    fi
+
+    # A single Connecting transition may occur during normal renegotiation.
+    # Two bounded probes reduce false negatives, but persistent failures are
+    # still displayed as failures (not silently converted to healthy).
+    error_file="$(mktemp)" || error_file='/dev/null'
+    for attempt in 1 2; do
+        trace="$(ops_warp_trace "${container_ip}" "${error_file}" || true)"
+        if [[ -n "${trace}" ]]; then
+            break
+        fi
+        [[ "${attempt}" == 1 ]] && sleep 2
+    done
     if [[ -z "${trace}" ]]; then
-        echo "SOCKS health    : failed"
+        last_error="$(tail -n 1 "${error_file}" 2>/dev/null || true)"
+    fi
+    [[ "${error_file}" == /dev/null ]] || rm -f -- "${error_file}"
+
+    if [[ -z "${trace}" ]]; then
+        echo "SOCKS data path : failed (2 attempts)"
+        [[ -n "${last_error}" ]] && echo "Probe error     : ${last_error}"
+        echo "WARP data path  : unverified/failed"
+        echo "Direct fallback : $(ops_warp_direct_fallback_state)"
+        echo "Action          : Check Connecting stage; optional menu 13 reconnects without deleting registration"
         return 0
     fi
 
     egress_ip="$(printf '%s\n' "${trace}" | awk -F= '$1=="ip"{print $2; exit}')"
     country="$(printf '%s\n' "${trace}" | awk -F= '$1=="loc"{print $2; exit}')"
     warp_state="$(printf '%s\n' "${trace}" | awk -F= '$1=="warp"{print $2; exit}')"
-
-    echo "SOCKS health    : ok"
+    echo "SOCKS data path : HTTP request succeeded"
     echo "Egress IP       : ${egress_ip:-unknown}"
     echo "Country         : ${country:-unknown}"
-    echo "Cloudflare WARP : ${warp_state:-unknown}"
-    echo "Direct fallback : $(echo "${SCRIPT_CONFIG}" | jq -r 'if (.xray.warp_fallback // 0) == 1 then "enabled" else "disabled" end')"
+    if [[ "${warp_state}" == on || "${warp_state}" == plus ]]; then
+        echo "WARP data path  : ok (warp=${warp_state})"
+    else
+        echo "WARP data path  : FAILED (warp=${warp_state:-unknown})"
+    fi
+    echo "Direct fallback : $(ops_warp_direct_fallback_state)"
+}
+
+# Manual, explicitly confirmed recovery. Does not change transport protocol,
+# delete reg.json, reinstall Docker/Xray, rotate credentials or change routing.
+function handler_warp_reconnect() {
+    local state answer=''
+    [[ "$(echo "${SCRIPT_CONFIG}" | jq -r '.xray.warp // 0')" == 1 ]] ||
+        { echo "WARP is not configured; cannot reconnect." >&2; return 1; }
+    command -v docker >/dev/null 2>&1 ||
+        { echo "Docker is unavailable." >&2; return 1; }
+    state="$(docker inspect -f '{{.State.Status}}' xray-script-warp 2>/dev/null || true)"
+    [[ "${state}" == running ]] ||
+        { echo "WARP container is not running; inspect its logs first." >&2; return 1; }
+
+    echo "WARP traffic may be briefly interrupted; registration, container and Xray config are preserved."
+    printf 'Type yes to reconnect WARP (anything else cancels): '
+    read -r answer || return 1
+    [[ "${answer}" == yes ]] || { echo "Canceled."; return 0; }
+
+    # Failing to disconnect an already disconnected daemon is not fatal, but
+    # failing to issue the subsequent connect is an actionable error.
+    docker exec xray-script-warp warp-cli --accept-tos disconnect ||
+        echo "Note: WARP disconnect was not accepted; trying connect." >&2
+    docker exec xray-script-warp warp-cli --accept-tos connect ||
+        { echo "WARP connect failed; inspect docker logs, no registration data was deleted." >&2; return 1; }
+    handler_warp_status
 }
 
 function handler_warp_fallback() {
@@ -467,7 +494,9 @@ function handler_doctor() {
                         ((failures++))
                     fi
                 else
-                    ops_fail "WARP SOCKS data path unreachable"
+                    local stage=''
+                    stage="$(ops_warp_client_status || true)"
+                    ops_fail "WARP SOCKS data path unreachable (client=${stage:-unknown}); see WARP status menu for reason and TCP listener check"
                     ((failures++))
                 fi
             else
