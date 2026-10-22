@@ -244,7 +244,7 @@ function handler_warp_netadmin_repair() {
     read -r confirmation || return 1
     [[ "${confirmation}" == yes ]] || { echo "Canceled."; return 0; }
 
-    OPS_WARP_REPAIR_BACKUP="xray-script-warp-before-netadmin-$(date +%Y%m%d%H%M%S)-$"
+    OPS_WARP_REPAIR_BACKUP="xray-script-warp-before-netadmin-$(date +%Y%m%d%H%M%S)-$BASHPID"
     OPS_WARP_REPAIR_PHASE=stopped
     trap 'ops_warp_netadmin_rollback' EXIT
     docker stop xray-script-warp >/dev/null || _error "Cannot stop old WARP container"
