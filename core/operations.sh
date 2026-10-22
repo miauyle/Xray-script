@@ -190,9 +190,11 @@ function ops_warp_netadmin_rollback() {
         fi
     fi
     docker update --restart=always xray-script-warp >/dev/null 2>&1 || true
-    if ! docker start xray-script-warp >/dev/null 2>&1; then
-        echo "CRITICAL: original WARP container could not be restarted." >&2
-        return 1
+    if [[ "$(docker inspect -f '{{.State.Running}}' xray-script-warp 2>/dev/null)" != true ]]; then
+        if ! docker start xray-script-warp >/dev/null 2>&1; then
+            echo "CRITICAL: original WARP container could not be restarted." >&2
+            return 1
+        fi
     fi
     restored_ip="$(ops_get_warp_container_ip || true)"
     current_ip="$(jq -r '.outbounds[]? | select(.tag == "warp") | .settings.servers[0].address // empty' "${XRAY_CONFIG_PATH}" 2>/dev/null | head -n 1)"
