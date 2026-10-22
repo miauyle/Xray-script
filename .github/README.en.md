@@ -5,7 +5,7 @@
 
 A Shell-based installer and manager for Xray-core, including REALITY / XHTTP configurations, subscriptions, routing, and diagnostics.
 
-**Current script version: `v2026.10.22.6`** · [Full changelog](../CHANGELOG.en.md)
+**Script version:** see [config.json](../config.json) · [Full changelog](../CHANGELOG.en.md)
 
 ## Quick start
 
