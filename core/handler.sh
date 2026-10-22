@@ -1431,7 +1431,7 @@ function handler_xray_config() {
     case "${CONFIG_TAG,,}" in
     mkcp)
         # 更新 mKCP Seed
-        XRAY_CONFIG="$(echo "${XRAY_CONFIG}" | jq --arg seed "${KCP_SEED}" '.inbounds[1].streamSettings.finalmask.udp[0].settings.password = $seed')"
+        XRAY_CONFIG="$(echo "${XRAY_CONFIG}" | jq --arg seed "${KCP_SEED}" '.inbounds[1].streamSettings.finalmask.udp[0].settings.value = $seed')"
         ;;
     vision | xhttp | trojan | fallback | sni)
         # 如果不是 sni 配置，更新 Reality 目标
@@ -1516,6 +1516,15 @@ function handler_xray_config() {
             )
         ')"
     fi
+    # Legacy mKCP password FinalMask name changed across Xray core versions.
+    # Probe the actual core before applying configuration to protect the service.
+    if [[ "${CONFIG_TAG,,}" == 'mkcp' ]]; then
+        local compatible_xray_config=''
+        compatible_xray_config="$(xray_mkcp_select_mask "${XRAY_CONFIG}")" ||
+            _error "Failed to choose an mKCP mask compatible with the installed Xray"
+        XRAY_CONFIG="${compatible_xray_config}"
+    fi
+
     # 获取更新后的路由规则
     XRAY_RULES="$(echo "${XRAY_CONFIG}" | jq '.routing.rules')"
     # 更新脚本配置中的路由规则
@@ -2815,6 +2824,7 @@ function handler_quick_install() {
 }
 
 # 运维扩展依赖本文件中已经定义的 apply/backup/WARP helper。
+source "${CUR_DIR}/xray_mkcp_compat.sh"
 source "${OPERATIONS_PATH}"
 source "${CUR_DIR}/bbr.sh"
 source "${CUR_DIR}/host_tuning.sh"
