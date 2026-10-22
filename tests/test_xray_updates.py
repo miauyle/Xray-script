@@ -96,6 +96,7 @@ class XrayUpdateTests(unittest.TestCase):
             old = tmp / "xray"
             old.write_text('#!/bin/sh\necho "Xray 26.3.27"\n')
             old.chmod(0o755)
+            service_file = tmp / "xray.service"
             archive = tmp / "fixture.zip"
             archive.write_bytes(b"mock binary archive with safe test content")
             digest = tmp / "fixture.dgst"
@@ -116,10 +117,15 @@ curl() {
             # must fail rather than being silently accepted by a Bash mock.
             cat > "$target" <<'INSTALLER'
 #!/usr/bin/env bash
-[[ "$#" -eq 3 && "$1" == install && "$2" == --local && -s "$3" ]] || {
+[[ "$1" == install && "$2" == --local && -s "$3" ]] || {
     echo 'unknown installer arguments' >&2
     exit 64
 }
+if [[ -f "$XRAY_SERVICE_FILE_PATH" ]]; then
+    [[ "$#" -eq 4 && "$4" == --no-update-service ]] || exit 65
+else
+    [[ "$#" -eq 3 ]] || exit 66
+fi
 printf '#!/bin/sh\\necho "Xray 26.10.21"\\n' > "$XRAY_BINARY_PATH"
 chmod +x "$XRAY_BINARY_PATH"
 [[ "$MOCK_INSTALL_FAIL" != 1 ]]
@@ -133,6 +139,7 @@ systemctl() { return 1; }
             base = "\n".join([
                 "declare -A CONFIG_DATA=()",
                 "export XRAY_BINARY_PATH=" + shlex.quote(str(old)),
+                "export XRAY_SERVICE_FILE_PATH=" + shlex.quote(str(service_file)),
                 "FIXTURE_ZIP=" + shlex.quote(str(archive)),
                 "FIXTURE_DIGEST=" + shlex.quote(str(digest)),
                 stubs,
@@ -141,6 +148,15 @@ systemctl() { return 1; }
             success = run_bash(base + '\nexport MOCK_INSTALL_FAIL=0\nxray_install_verified v26.10.21 || exit 40\n'
                                       '[[ "$(xray_installed_version)" == "v26.10.21" ]] || exit 41\n')
             self.assertEqual(success.returncode, 0, success.stderr)
+
+            # A second successful upgrade with an existing service must pass
+            # --no-update-service (never overwrite hand-tuned systemd units).
+            service_file.write_text("[Service]\\nUser=root\\n")
+            old.write_text('#!/bin/sh\necho "Xray 26.3.27"\n')
+            old.chmod(0o755)
+            with_service = run_bash(base + '\nexport MOCK_INSTALL_FAIL=0\n'
+                                           'xray_install_verified v26.10.21 || exit 44\n')
+            self.assertEqual(with_service.returncode, 0, with_service.stderr)
 
             old.write_text('#!/bin/sh\necho "Xray 26.3.27"\n')
             old.chmod(0o755)
