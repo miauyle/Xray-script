@@ -54,6 +54,9 @@
 
 ## 更新日志
 
+30. v2026.10.22.6 修复 WARP 启用时 `Failed to obtain WARP container IP`：已有运行容器现在也会返回容器 IP；已经停止的容器尝试重新启动，新容器首次注册/自动重启期间最多等待 20 秒获取运行中的 IPv4 地址。失败时显示容器状态与最近日志，避免将空 IP 写入 Xray 配置。失败回滚只移除本次新建容器，保留既有 WARP 容器、镜像和注册数据（不再触发具有破坏性的 `--disable-warp` 清理）。新增独立 Docker mock 回归测试；不改变现有 Xray 配置、UUID 或 REALITY 密钥。
+
+
 29. v2026.10.22.5 修复 **Xray 26.10.21 全新安装** 报 `unsupported config file extension`：配置应用、失败回滚及 mKCP 兼容性探测的临时配置现在均以 `.json` 结尾（即使显式 `-format=json`，新版内核仍检查文件扩展名）。新增真实 Xray v26.3.27/v26.10.21 的临时配置写入与回滚测试。Mihomo 订阅只在服务器实际运行 **Xray ≥ v26.9.8** 时为 VLESS REALITY 节点输出 `reality-opts.support-x25519mlkem768: true`，低版本/未知版本不启用；单机 `clash.yaml`、`proxies.yaml` 和中心本地节点 `multi_clash.yaml` 一致，远端 Provider 的参数由各自 VPS 生成并透传。保留 `client-fingerprint: chrome`；不改变原始 VLESS 分享链接及 Shadowrocket 专用逻辑。更新后重新生成订阅 YAML、客户端刷新订阅；不会自动改动已有 Xray 身份凭据或在旧节点上强制开启后量子扩展。
 
 28. v2026.10.22.4 恢复 Xray 的文件日志记录：所有六种协议模板重新写入 `/var/log/xray/access.log` 和 `/var/log/xray/error.log`。安装/升级、配置切换和服务启动前检测 systemd 实际 User/Group 与日志文件可写性；仅当旧文件无法写入时，先按时间戳备份旧内容（限制备份权限），再创建适当用户/组的 0640 日志文件。可写日志保持原样，不会清空或重复备份。异常符号链接、硬链接和非预期目录所有者拒绝自动修复；旧配置和证书/订阅保持不变。可在「运维与诊断 → 日志」查看 access.log 和 error.log；CI 增加 root→nobody 权限与真实 Xray 文件日志测试。

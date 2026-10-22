@@ -2383,8 +2383,12 @@ function handler_warp() {
         persist_script_config
         exec_docker '--disable-warp'
     else
-        # 新启用阶段如果后续校验/重启失败，自动清理刚创建的 WARP 容器。
-        trap 'bash "${DOCKER_PATH}" --disable-warp >/dev/null 2>&1 || true' EXIT
+        # Only remove a container created by this attempt on failure.
+        # Keep pre-existing containers and registration data intact; the old
+        # --disable-warp trap deleted the image and persistent WARP directory.
+        if ! docker container inspect xray-script-warp >/dev/null 2>&1; then
+            trap 'docker rm -f xray-script-warp >/dev/null 2>&1 || true' EXIT
+        fi
         exec_docker '--build-warp'
         local container_ip="$(exec_docker '--enable-warp')"
         [[ -n "${container_ip}" ]] || _error "Failed to obtain WARP container IP"
