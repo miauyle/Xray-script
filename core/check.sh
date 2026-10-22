@@ -733,25 +733,26 @@ function check_xray_config_exists() {
 # 返回值: 0-版本存在 1-版本不存在 (并打印相应的提示信息到 >&2)
 # =============================================================================
 function check_xray_version_exists() {
-    local version="$1" # 获取版本号参数
-
-    # 打印正在检查的信息
-    _info "$(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.version.check")v${version}"
-
-    # 构造 GitHub Releases 页面的 URL
-    local version_url="https://github.com/XTLS/Xray-core/releases/tag/v${version#*v}"
-
-    # 使用 curl 获取页面的 HTTP 状态码
-    local status_code=$(curl -L -o /dev/null -s -w '%{http_code}\n' "$version_url")
-
-    # 检查状态码是否为 200 (OK)
-    if [[ "$status_code" == "200" ]]; then
-        _pass "$(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.version.exist")${version}"
-        return 0
-    else
-        _fail "$(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.version.not_exist")${version}"
+    local version="$1"
+    version="${version#V}"
+    version="${version#v}"
+    if [[ ! "$version" =~ ^[0-9]+(\.[0-9]+){1,3}([.-][[:alnum:].-]+)?$ ]]; then
+        _fail "Invalid Xray version: $version"
         return 1
     fi
+    local url="https://api.github.com/repos/XTLS/Xray-core/releases/tags/v$version"
+    local status_code=''
+    _info "$(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.version.check")v$version"
+    status_code="$(curl -sSL --retry 2 --connect-timeout 10 --max-time 30 -o /dev/null -w '%{http_code}' "$url")" || {
+        _fail "Could not check GitHub release v$version (network error)."
+        return 1
+    }
+    if [[ "$status_code" == '200' ]]; then
+        _pass "$(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.version.exist")v$version"
+        return 0
+    fi
+    _fail "$(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.version.not_exist")v$version (HTTP $status_code)"
+    return 1
 }
 
 # =============================================================================

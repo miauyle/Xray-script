@@ -238,6 +238,26 @@ SNI 配置中，CDN 的分享链接 Alpn 默认为 H2，如有 H3 需求，请�
 **操作诊断**：中心菜单「10 → 6 → 7」检查远端 Provider 可达性及中心本机参数。遇到节点聚合后连接失败时，先用普通 VPS 自己的 clash.yaml 对比，再检查中心订阅；无需再从每台机器相互添加 peer。
 
 
+## Xray-core 版本更新
+
+主菜单选择 **2. 安装 / 更新 Xray** 后，有三种版本选择：
+
+- **最新版**：包含预发布版（Pre-release），例如安全紧急修复版本。通过 GitHub Releases 列表解析最新发布时间的有效标签。
+- **稳定版**：使用 GitHub Latest Stable API，**不会**自动选择预发布版。紧急安全版仍是 Pre-release 时，稳定版可能更旧。
+- **自选版**：输入 `v26.10.21` 或 `26.10.21` 形式的完整版本号；不依赖 GitHub API 预先确认该版本是否存在，而是通过实际的 Release 文件下载与校验确认。
+
+更新流程会下载所选版本对应架构的 ZIP 和 `.dgst` 文件，校验 SHA-256，再通过 Xray 官方安装器的本地文件模式安装。安装后核对实际 `xray version`；下载、校验或安装失败时保留原配置版本及之前的可执行文件，并尽可能恢复原服务。不会重新生成 REALITY 密钥、UUID 或订阅 Token。
+
+升级之后可在 VPS 上运行：
+
+```bash
+/usr/local/bin/xray version
+sudo systemctl is-active xray
+sudo journalctl -u xray -n 30 --no-pager
+```
+
+建议仍然测试 VLESS REALITY 和 XHTTP 节点连通性。遇到 GitHub 下载失败，应检查 VPS 到 `github.com`、`raw.githubusercontent.com` 的网络，不要忽略错误继续重启服务。
+
 ## Xray 配置自动备份
 
 脚本在覆盖正式 Xray 配置前会自动保存当前版本：

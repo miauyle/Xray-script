@@ -239,8 +239,12 @@ function exec_read() {
         # 根据配置项名称进行特定验证
         case "${opt}" in
         version)
-            # 验证 Xray 版本
-            exec_check '--xray' "${result}" || continue
+            # Validate locally: the release ZIP and SHA-256 check will confirm
+            # existence. Do not block manual versions on GitHub API rate limits.
+            if [[ ! "$result" =~ ^[vV]?[0-9]+(\.[0-9]+){1,3}([.-][[:alnum:].-]+)?$ ]]; then
+                echo "error: Enter an Xray version such as v26.10.21." >&2
+                continue
+            fi
             ;;
         email)
             # 验证邮箱地址
@@ -1878,26 +1882,159 @@ function handler_custom_sites() {
 #   $1: xray_version - 版本指定 ("latest", "custom", 或具体版本号)，默认为 release
 # 返回值: 无 (直接修改 CONFIG_DATA 和 SCRIPT_CONFIG 全局变量)
 # =============================================================================
-function handler_xray_version() {
-    local xray_version="$1" # 获取版本指定参数
-    # 根据版本指定参数确定具体版本
-    case "${xray_version,,}" in
+# Resolve a release tag before making any changes to the installed binary.
+# "latest" includes prereleases; "release" uses the latest stable release.
+function xray_resolve_version() {
+    local selector="${1:-release}"
+    local payload='' tag=''
+    case "${selector,,}" in
     latest)
-        # 获取最新的 Xray 版本
-        CONFIG_DATA['version']="$(curl -fsSL https://api.github.com/repos/XTLS/Xray-core/releases | jq -r '.[0].tag_name')"
+        payload="$(curl -fsSL --retry 2 --connect-timeout 10 --max-time 35 'https://api.github.com/repos/XTLS/Xray-core/releases?per_page=30')" || {
+            echo "error: Unable to fetch Xray releases from GitHub (network/rate limit)." >&2
+            return 1
+        }
+        tag="$(jq -er '[.[] | select(.draft == false and (.published_at != null) and (.tag_name | type == "string"))] | sort_by(.published_at) | last | .tag_name // empty' <<<"$payload")" || {
+            echo "error: GitHub returned no valid Xray release tag." >&2
+            return 1
+        }
+        ;;
+    release)
+        payload="$(curl -fsSL --retry 2 --connect-timeout 10 --max-time 35 'https://api.github.com/repos/XTLS/Xray-core/releases/latest')" || {
+            echo "error: Unable to fetch the latest stable Xray release from GitHub." >&2
+            return 1
+        }
+        tag="$(jq -er '.tag_name | select(type == "string" and length > 0)' <<<"$payload")" || {
+            echo "error: GitHub returned no valid stable Xray release tag." >&2
+            return 1
+        }
         ;;
     custom)
-        # 读取用户自定义的版本
-        exec_read 'version'
+        exec_read 'version' || return 1
+        tag="${CONFIG_DATA[version]:-}"
         ;;
     *)
-        # 获取最新的 release 版本
-        CONFIG_DATA['version']="$(curl -fsSL https://api.github.com/repos/XTLS/Xray-core/releases/latest | jq -r '.tag_name')"
+        # Also allow callers to provide a concrete version without a prompt.
+        tag="$selector"
         ;;
     esac
-    # 更新脚本配置中的 Xray 版本
-    SCRIPT_CONFIG="$(echo "${SCRIPT_CONFIG}" | jq --arg xray "${CONFIG_DATA['version']}" '.xray.version = $xray')"
-    # 将更新后的脚本配置写入文件
+    tag="${tag#V}"
+    tag="${tag#v}"
+    if [[ ! "$tag" =~ ^[0-9]+(\.[0-9]+){1,3}([.-][[:alnum:].-]+)?$ ]]; then
+        echo "error: Invalid Xray release version: $tag" >&2
+        return 1
+    fi
+    CONFIG_DATA['version']="v$tag"
+}
+
+# Read the version of the actual installed core, not the script's cached version.
+function xray_installed_version() {
+    local binary="${XRAY_BINARY_PATH:-/usr/local/bin/xray}"
+    [[ -x "$binary" ]] || return 1
+    local version
+    version="$("$binary" version 2>/dev/null | awk 'NR == 1 && $1 == "Xray" {print $2}')" || return 1
+    version="${version#v}"
+    [[ "$version" =~ ^[0-9]+(\.[0-9]+){1,3}([.-][[:alnum:].-]+)?$ ]] || return 1
+    printf 'v%s\n' "$version"
+}
+
+# Download the EXACT selected release with redirect handling and SHA-256 validation.
+# The official installer is used in local-archive mode to avoid its remote
+# download path reselecting a different (possibly older stable) release.
+function xray_install_verified() {
+    local version="$1" machine='' url='' expected='' actual='' result='' failure=''
+    local work='' archive='' digest='' installer='' old_binary='' was_running=0 restore_failed=0
+    local binary="${XRAY_BINARY_PATH:-/usr/local/bin/xray}"
+    case "$(uname -m)" in
+    x86_64 | amd64) machine='64' ;;
+    i386 | i686) machine='32' ;;
+    armv5tel) machine='arm32-v5' ;;
+    armv6l) machine='arm32-v6' ;;
+    armv7 | armv7l) machine='arm32-v7a' ;;
+    armv8 | arm64 | aarch64) machine='arm64-v8a' ;;
+    mips) machine='mips32' ;;
+    mipsle) machine='mips32le' ;;
+    mips64) machine='mips64' ;;
+    mips64le) machine='mips64le' ;;
+    ppc64) machine='ppc64' ;;
+    ppc64le) machine='ppc64le' ;;
+    riscv64) machine='riscv64' ;;
+    s390x) machine='s390x' ;;
+    *) echo "error: Unsupported architecture: $(uname -m)" >&2; return 1 ;;
+    esac
+    work="$(mktemp -d)" || return 1
+    archive="$work/Xray-linux-$machine.zip"
+    digest="$archive.dgst"
+    installer="$work/install-release.sh"
+    url="https://github.com/XTLS/Xray-core/releases/download/$version/Xray-linux-$machine.zip"
+
+    if ! curl -fsSL --retry 2 --connect-timeout 10 --max-time 240 -o "$archive" "$url" ||
+       ! curl -fsSL --retry 2 --connect-timeout 10 --max-time 35 -o "$digest" "$url.dgst" ||
+       ! curl -fsSL --retry 2 --connect-timeout 10 --max-time 35 -o "$installer" 'https://raw.githubusercontent.com/XTLS/Xray-install/main/install-release.sh'; then
+        echo "error: Xray download failed; previous installation remains unchanged ($version)." >&2
+        rm -rf -- "$work"
+        return 1
+    fi
+
+    expected="$(awk -F '= *' '/256[[:space:]]*=/ {gsub(/[[:space:]]/, "", $2); print $2; exit}' "$digest")"
+    actual="$(sha256sum "$archive" | awk '{print $1}')"
+    if [[ ! "$expected" =~ ^[[:xdigit:]]{64}$ || "${expected,,}" != "${actual,,}" ]]; then
+        echo "error: Xray archive SHA-256 verification failed; installation aborted." >&2
+        rm -rf -- "$work"
+        return 1
+    fi
+
+    if [[ -f "$binary" ]]; then
+        old_binary="$work/xray.previous"
+        cp -p -- "$binary" "$old_binary" || { rm -rf -- "$work"; return 1; }
+    fi
+    systemctl -q is-active xray >/dev/null 2>&1 && was_running=1
+
+    if ! bash "$installer" install -u root --local "$archive"; then
+        failure="Official Xray installer failed"
+    else
+        result="$(xray_installed_version 2>/dev/null || true)"
+        if [[ "$result" != "$version" ]]; then
+            failure="Xray version check failed (expected $version, got ${result:-none})"
+        elif [[ "$was_running" -eq 1 ]] && ! systemctl -q is-active xray >/dev/null 2>&1; then
+            failure="Xray service is not active after installation"
+        fi
+    fi
+    if [[ -n "$failure" ]]; then
+        echo "error: $failure; restoring the previous Xray binary." >&2
+        if [[ -n "$old_binary" ]]; then
+            # Replace by rename, not by writing into a potentially running binary
+            # (which can fail with ETXTBSY and leave the service unusable).
+            local restore_path=''
+            if ! restore_path="$(mktemp "${binary}.rollback.XXXXXX")"; then
+                echo "CRITICAL: Unable to stage Xray rollback (backup: $old_binary)" >&2
+                restore_failed=1
+            elif cp -p -- "$old_binary" "$restore_path" && mv -f -- "$restore_path" "$binary"; then
+                if [[ "$was_running" -eq 1 ]]; then
+                    systemctl restart xray || echo "CRITICAL: Unable to restart the previous Xray core" >&2
+                fi
+            else
+                echo "CRITICAL: Unable to restore $binary (backup: $old_binary)" >&2
+                restore_failed=1
+                rm -f -- "$restore_path"
+            fi
+        elif [[ -f "$binary" ]]; then
+            rm -f -- "$binary"
+        fi
+        if [[ "$restore_failed" -eq 1 ]]; then
+            echo "CRITICAL: Backup retained at $old_binary; restore it manually." >&2
+        else
+            rm -rf -- "$work"
+        fi
+        return 1
+    fi
+    rm -rf -- "$work"
+    echo "info: Verified Xray $version installed successfully." >&2
+    return 0
+}
+
+function handler_xray_version() {
+    xray_resolve_version "${1:-release}" || return 1
+    SCRIPT_CONFIG="$(echo "$SCRIPT_CONFIG" | jq --arg xray "${CONFIG_DATA[version]}" '.xray.version = $xray')" || return 1
     persist_script_config
 }
 
@@ -1946,20 +2083,37 @@ function handler_change_xray_port() {
 # 返回值: 无 (通过调用外部脚本执行安装)
 # =============================================================================
 function handler_install() {
-    local xray_version="$1"       # 获取版本参数
-    local force_install="${2:-n}" # 获取强制安装参数，默认为 'n'
-    # 如果提供了版本参数，则处理版本配置
-    if [[ -n "${xray_version}" ]]; then
-        handler_xray_version "${xray_version}"
+    local xray_version="${1:-}"
+    local force_install="${2:-n}"
+    local desired='' current='' cached=''
+    if [[ -n "$xray_version" ]]; then
+        xray_resolve_version "$xray_version" || return 1
+        desired="${CONFIG_DATA[version]}"
     else
-        # 否则从脚本配置中读取版本
-        CONFIG_DATA['version']="$(echo "${SCRIPT_CONFIG}" | jq -r '.xray.version')"
+        cached="$(jq -r '.xray.version // empty' <<<"$SCRIPT_CONFIG")"
+        if [[ -n "$cached" ]]; then
+            xray_resolve_version "$cached" || return 1
+        else
+            xray_resolve_version 'release' || return 1
+        fi
+        desired="${CONFIG_DATA[version]}"
     fi
-    # 检查 Xray 命令是否存在，或是否强制安装
-    if ! cmd_exists 'xray' || [[ "${force_install}" != n ]]; then
-        # 调用 Xray-install 脚本进行安装
-        bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install -u root --version "${CONFIG_DATA['version']}"
+    current="$(xray_installed_version 2>/dev/null || true)"
+    if [[ "$current" == "$desired" && "$force_install" == 'n' ]]; then
+        echo "info: Xray $desired is already installed." >&2
+    else
+        # On failure, keep both the old executable and the last installed version
+        # recorded in config.json; never report a failed update as successful.
+        if ! xray_install_verified "$desired"; then
+            # A fresh installation has no previous version; clear any version
+            # preselected by the interactive installer if installation failed.
+            SCRIPT_CONFIG="$(echo "$SCRIPT_CONFIG" | jq --arg v "$current" '.xray.version = $v')" || return 1
+            persist_script_config
+            return 1
+        fi
     fi
+    SCRIPT_CONFIG="$(echo "$SCRIPT_CONFIG" | jq --arg v "$desired" '.xray.version = $v')" || return 1
+    persist_script_config
 }
 
 # =============================================================================
