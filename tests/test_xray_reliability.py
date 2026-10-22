@@ -84,7 +84,7 @@ class XrayReliabilityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             installed = root / "config.json"
-            backup = root / "backup.json"
+            backup = root / "config-previous.json"
             installed.write_text('{"value":"new"}')
             backup.write_text('{"value":"old"}')
             script = "\n".join([
