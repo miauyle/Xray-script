@@ -56,6 +56,54 @@ class XrayReliabilityTests(unittest.TestCase):
             self.assertIn("original config was kept", result.stderr)
             self.assertEqual(json.loads(p.read_text()), {"existing": True})
 
+    def test_apply_uses_json_suffixed_temporary_file_and_keeps_candidate(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "config.json"
+            candidate = '{"log":{"loglevel":"warning"}}'
+            script = "\n".join([
+                "XRAY_CONFIG_PATH=" + shlex.quote(str(path)),
+                "XRAY_CONFIG=" + shlex.quote(candidate),
+                "_error() { echo \"$*\" >&2; exit 90; }",
+                "xray() {",
+                '  local candidate="${@: -1}"',
+                '  [[ "$candidate" == *.json ]] || { echo "unsupported config file extension" >&2; return 23; }',
+                '  jq empty "$candidate"',
+                "}",
+                "xray_prepare_log_files() { return 0; }",
+                "backup_xray_config() { :; }",
+                shell_function("apply_xray_config"),
+                "apply_xray_config ci:fresh-install",
+                '[[ -s "$XRAY_CONFIG_PATH" ]] || exit 91',
+                '[[ "$(jq -c . "$XRAY_CONFIG_PATH")" == ' + shlex.quote(candidate) + ' ]] || exit 92',
+            ])
+            result = run_shell(script)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(path.read_text()), json.loads(candidate))
+
+    def test_rollback_staged_file_uses_json_extension(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            installed = root / "config.json"
+            backup = root / "config-previous.json"
+            installed.write_text('{"value":"new"}')
+            backup.write_text('{"value":"old"}')
+            script = "\n".join([
+                "XRAY_CONFIG_PATH=" + shlex.quote(str(installed)),
+                "SCRIPT_CONFIG_PENDING_PATH=" + shlex.quote(str(root / "none")),
+                "xray() {",
+                '  local candidate="${@: -1}"',
+                '  [[ "$candidate" == *.json ]] || { echo "unsupported config file extension" >&2; return 23; }',
+                '  jq empty "$candidate"',
+                "}",
+                "clear_pending_script_config() { :; }",
+                "restart_xray_service_checked() { return 0; }",
+                shell_function("rollback_xray_config"),
+                "rollback_xray_config " + shlex.quote(str(backup)) + " ci:rollback",
+            ])
+            result = run_shell(script)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(installed.read_text()), {"value": "old"})
+
     def test_fast_crashing_service_is_not_accepted_as_healthy(self):
         script = "\n".join([
             "CHECKS=0",

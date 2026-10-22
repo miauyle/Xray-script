@@ -67,4 +67,6 @@ jobs:
           chmod +x xray-bin/xray
           ./xray-bin/xray version
       - name: Validate all protocol templates and short-lived service startup
-        run: python3 tests/check_real_xray_templates.py ./xray-bin/xray
+        run: |
+          python3 tests/check_real_xray_templates.py ./xray-bin/xray
+          python3 tests/check_real_xray_apply.py ./xray-bin/xray
