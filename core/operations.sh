@@ -60,6 +60,13 @@ function ops_warp_client_mode() {
         awk -F'Mode: ' '/Mode:/{print $2; exit}'
 }
 
+# New WARP builds reinstall fwmark policy rules; Docker NET_ADMIN is needed.
+function ops_warp_has_net_admin() {
+    local caps=''
+    caps="$(docker inspect --format='{{json .HostConfig.CapAdd}}' xray-script-warp 2>/dev/null)" || return 1
+    [[ "${caps}" == *NET_ADMIN* ]]
+}
+
 function ops_warp_direct_fallback_state() {
     echo "${SCRIPT_CONFIG}" | jq -r \
         'if (.xray.warp_fallback // 0) == 1 then "enabled" else "disabled" end'
@@ -85,6 +92,11 @@ function handler_warp_status() {
 
     container_ip="$(ops_get_warp_container_ip || true)"
     echo "Container IP    : ${container_ip:-unknown}"
+    if ops_warp_has_net_admin; then
+        echo "WARP NET_ADMIN  : granted"
+    else
+        echo "WARP NET_ADMIN  : MISSING (fwmark policy repair may fail: EPERM; see menu 14)"
+    fi
     client_status="$(ops_warp_client_status || true)"
     client_reason="$(ops_warp_client_reason || true)"
     client_mode="$(ops_warp_client_mode || true)"
@@ -160,6 +172,108 @@ function handler_warp_reconnect() {
         echo "Note: WARP disconnect was not accepted; trying connect." >&2
     docker exec xray-script-warp warp-cli --accept-tos connect ||
         { echo "WARP connect failed; inspect docker logs, no registration data was deleted." >&2; return 1; }
+    handler_warp_status
+}
+
+
+# EXIT rollback is armed only after explicit user confirmation.
+# Keep the old registration bind-mount and old Docker container intact.
+function ops_warp_netadmin_rollback() {
+    trap - EXIT
+    local restored_ip='' current_ip=''
+    echo "WARP NET_ADMIN migration failed; recovering original container..." >&2
+    if [[ "${OPS_WARP_REPAIR_PHASE:-}" == renamed ]]; then
+        docker rm -f xray-script-warp >/dev/null 2>&1 || true
+        if ! docker rename "${OPS_WARP_REPAIR_BACKUP}" xray-script-warp; then
+            echo "CRITICAL: old container is preserved as ${OPS_WARP_REPAIR_BACKUP}, but cannot be renamed back." >&2
+            return 1
+        fi
+    fi
+    docker update --restart=always xray-script-warp >/dev/null 2>&1 || true
+    if ! docker start xray-script-warp >/dev/null 2>&1; then
+        echo "CRITICAL: original WARP container could not be restarted." >&2
+        return 1
+    fi
+    restored_ip="$(ops_get_warp_container_ip || true)"
+    current_ip="$(jq -r '.outbounds[]? | select(.tag == "warp") | .settings.servers[0].address // empty' "${XRAY_CONFIG_PATH}" 2>/dev/null | head -n 1)"
+    if [[ -n "${restored_ip}" && "${current_ip}" != "${restored_ip}" ]]; then
+        XRAY_CONFIG="$(jq --arg ip "${restored_ip}" '
+            .outbounds |= map(
+                if .tag == "warp" then .settings.servers[0].address = $ip else . end
+            )
+        ' "${XRAY_CONFIG_PATH}")" ||
+            { echo "CRITICAL: failed to prepare restored Xray WARP IP" >&2; return 1; }
+        apply_xray_config "warp:netadmin:rollback" "restart"
+    fi
+    echo "Original container restored; inspect WARP and Xray status." >&2
+}
+
+# One-time manual migration for legacy containers. Installer updates alone
+# cannot grant new Linux capabilities to an existing Docker container.
+function handler_warp_netadmin_repair() {
+    local image network_mode saved_mount old_ip old_xray_ip new_ip confirmation=''
+    local expected_mount="${SCRIPT_CONFIG_DIR}/docker/cloudflare-warp"
+
+    [[ "$(echo "${SCRIPT_CONFIG}" | jq -r '.xray.warp // 0')" == 1 ]] ||
+        _error "WARP must be enabled before repairing its container"
+    command -v docker >/dev/null 2>&1 || _error "Docker unavailable"
+    [[ "$(docker inspect -f '{{.State.Status}}' xray-script-warp 2>/dev/null)" == running ]] ||
+        _error "The existing WARP container must be running for safe migration"
+    if ops_warp_has_net_admin; then
+        echo "WARP container already has NET_ADMIN; no migration needed."
+        return 0
+    fi
+    image="$(docker inspect -f '{{.Config.Image}}' xray-script-warp 2>/dev/null || true)"
+    network_mode="$(docker inspect -f '{{.HostConfig.NetworkMode}}' xray-script-warp 2>/dev/null || true)"
+    saved_mount="$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/var/lib/cloudflare-warp"}}{{.Source}}{{end}}{{end}}' xray-script-warp 2>/dev/null || true)"
+    old_ip="$(ops_get_warp_container_ip || true)"
+    old_xray_ip="$(jq -r '.outbounds[]? | select(.tag == "warp" and .protocol == "socks") | .settings.servers[0].address // empty' "${XRAY_CONFIG_PATH}" | head -n 1)"
+    [[ "${image}" == xray-script-warp ]] || _error "Custom WARP image detected; refuse automatic migration"
+    [[ "${network_mode}" == default || "${network_mode}" == bridge ]] ||
+        _error "Custom Docker network detected; refuse automatic migration"
+    [[ "${saved_mount}" == "${expected_mount}" ]] ||
+        _error "Unexpected registration bind mount; refuse automatic migration"
+    [[ "${old_ip}" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ && -n "${old_xray_ip}" ]] ||
+        _error "Missing existing Docker/Xray WARP IP; refuse automatic migration"
+
+    echo "WARP is missing NET_ADMIN required for fwmark repair (EPERM)."
+    echo "This recreates ONLY the WARP container using the same image and persisted registration folder."
+    echo "The original will remain stopped as a rollback backup (restart=no)."
+    echo "WARP traffic will be interrupted briefly; Xray WARP outbound IP will be updated if needed."
+    printf 'Type yes to repair the container: '
+    read -r confirmation || return 1
+    [[ "${confirmation}" == yes ]] || { echo "Canceled."; return 0; }
+
+    OPS_WARP_REPAIR_BACKUP="xray-script-warp-before-netadmin-$(date +%Y%m%d%H%M%S)-$"
+    OPS_WARP_REPAIR_PHASE=stopped
+    trap 'ops_warp_netadmin_rollback' EXIT
+    docker stop xray-script-warp >/dev/null || _error "Cannot stop old WARP container"
+    docker rename xray-script-warp "${OPS_WARP_REPAIR_BACKUP}" ||
+        _error "Cannot rename old WARP container"
+    OPS_WARP_REPAIR_PHASE=renamed
+    docker update --restart=no "${OPS_WARP_REPAIR_BACKUP}" >/dev/null ||
+        _error "Cannot prevent original container from auto restarting"
+
+    # Uses service/docker.sh production creator (new --cap-add NET_ADMIN).
+    new_ip="$(exec_docker '--enable-warp')" ||
+        _error "Replacement WARP container startup failed"
+    [[ "${new_ip}" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] ||
+        _error "Replacement WARP container did not receive an IPv4 address"
+    ops_warp_has_net_admin || _error "New container NET_ADMIN capability missing"
+
+    if [[ "${new_ip}" != "${old_xray_ip}" ]]; then
+        XRAY_CONFIG="$(jq --arg ip "${new_ip}" '
+            .outbounds |= map(
+                if .tag == "warp" then .settings.servers[0].address = $ip else . end
+            )
+        ' "${XRAY_CONFIG_PATH}")" ||
+            _error "Cannot stage new WARP outbound IP"
+        apply_xray_config "warp:netadmin:repair" "restart"
+    fi
+    trap - EXIT
+    OPS_WARP_REPAIR_PHASE=complete
+    echo "WARP NET_ADMIN capability granted; preserved old container: ${OPS_WARP_REPAIR_BACKUP}"
+    echo "Old backup is STOPPED with restart=no; do not run both containers at once."
     handler_warp_status
 }
 
@@ -482,6 +596,12 @@ function handler_doctor() {
             state="$(docker inspect -f '{{.State.Status}}' xray-script-warp 2>/dev/null || true)"
             if [[ "${state}" == 'running' ]]; then
                 ops_pass "WARP container running"
+                if ops_warp_has_net_admin; then
+                    ops_pass "WARP NET_ADMIN capability"
+                else
+                    ops_fail "WARP container lacks NET_ADMIN: fwmark policy repair may fail with EPERM (menu 14)"
+                    ((failures++))
+                fi
                 ip="$(ops_get_warp_container_ip || true)"
                 trace="$(ops_warp_trace "${ip}" || true)"
                 if [[ -n "${trace}" ]]; then
