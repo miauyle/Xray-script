@@ -4,7 +4,7 @@
 
 基于 Shell 的 Xray-core 安装与管理脚本，支持多种 REALITY / XHTTP 配置、订阅发布、分流与运维诊断。
 
-**当前脚本版本：`v2026.10.22.6`** · [完整更新记录](CHANGELOG.md)
+**脚本版本：以 [config.json](config.json) 为准** · [完整更新记录](CHANGELOG.md)
 
 ## 快速开始
 
