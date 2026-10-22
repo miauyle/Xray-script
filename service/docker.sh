@@ -295,7 +295,7 @@ function enable_warp() {
     else
         print_info "$(echo "$I18N_DATA" | jq -r '.docker.warp.enable.start')"
         mkdir -vp "${WARP_DIR}" >&2
-        docker run -d --restart=always --name="${container_name}" --log-driver json-file --log-opt max-size=100m --log-opt max-file=3 -v "${WARP_DIR}":/var/lib/cloudflare-warp:rw xray-script-warp >&2 ||
+        docker run -d --restart=always --cap-add=NET_ADMIN --name="${container_name}" --log-driver json-file --log-opt max-size=100m --log-opt max-file=3 -v "${WARP_DIR}":/var/lib/cloudflare-warp:rw xray-script-warp >&2 ||
             print_error "$(echo "$I18N_DATA" | jq -r '.docker.warp.build.fail')"
     fi
 

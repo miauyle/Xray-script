@@ -567,6 +567,7 @@ function processes_operations() {
     11) processes_host_conntrack ;;
     12) processes_host_swap ;;
     13) exec_handler '--warp-reconnect' ;;
+    14) exec_handler '--warp-netadmin-repair' ;;
     *) return 0 ;;
     esac
 }

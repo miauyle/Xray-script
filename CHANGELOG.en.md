@@ -4,6 +4,9 @@
 
 Detailed historical release notes are archived here. Original numbering is retained and may not be strictly chronological.
 
+32. v2026.10.22.8 fixes the WARP fwmark permissions failure: recent WARP clients reinstall Linux fwmark policy rules, which fail with `Operation not permitted`/`FirewallRepairFailed` without Docker `CAP_NET_ADMIN`. Newly created containers grant only `--cap-add=NET_ADMIN`, not `--privileged`. Diagnostics explicitly report missing capability. Operations item 14 requires explicit confirmation to recreate eligible legacy script-managed containers with the same image and persisted registration mount, keeping the old stopped container as a backup and transactionally updating Xray's WARP IP if needed. Failed migration attempts to roll back. Tests cover opt-in and restoration; this does not fix unrelated MASQUE network failures.
+
+
 31. v2026.10.22.7 removes the duplicate WARP status handler and reports client stage, TCP listener, proxied HTTP, verified `warp=on` and curl errors separately. The probe retries at most twice. Operations item 13 provides an explicitly confirmed WARP disconnect/connect while retaining registration, container, Xray configuration and subscriptions. No automatic tunnel protocol change. Persistent network faults may remain.
 
 

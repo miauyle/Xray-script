@@ -37,6 +37,20 @@ Operations & Diagnostics item 3 shows client connection stage, TCP listener, pro
 
 Review `docker exec xray-script-warp warp-cli --accept-tos status`, `docker logs --tail 80 xray-script-warp`, MASQUE UDP/443 reachability and ISP path stability if still stuck. Do not automatically change tunnel protocol or delete registration. Xray traffic using Direct routes may remain unaffected.
 
+## WARP Connecting loop: fwmark permission denied
+
+`IPv4 fwmark rule install: Operation not permitted (os error 1)` with `FirewallRepairFailed` means WARP cannot reinstall Linux policy-routing fwmark rules inside Docker. v2026.10.22.8 grants only `--cap-add=NET_ADMIN` for newly created WARP containers, never `--privileged`.
+
+Existing containers cannot gain capabilities through restarts or by updating the installer alone. Check:
+
+```bash
+docker inspect xray-script-warp --format '{{json .HostConfig.CapAdd}}'
+```
+
+If the result is `null` or lacks `NET_ADMIN`, update Xray-script and choose Operations & Diagnostics → 14 (Repair WARP NET_ADMIN), then explicitly enter `yes`. This applies only to known script-managed container images, default bridge networking and the expected persisted registration bind-mount. The original container is retained stopped with `restart=no`, the new container uses the same image and registration data, and Xray's WARP IP is transactionally updated if Docker changes it. Migration errors attempt restoration of the original.
+
+WARP-routed traffic will be briefly interrupted. Then check item 3 for `NET_ADMIN: granted` and an actual `warp=on` response; repeat probes to assess stability. This does not guarantee the upstream Cloudflare MASQUE/UDP path stays stable; never start both backup and replacement containers simultaneously.
+
 ## Centralized subscriptions fail
 
 Test each VPS's standalone node and `proxies.yaml` first, then inspect the center's Provider diagnostics. Regenerate subscriptions after changing credentials, and refresh subscriptions on clients. Subscription URLs contain bearer tokens and must stay private.

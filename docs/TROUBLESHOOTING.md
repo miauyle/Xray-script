@@ -46,6 +46,20 @@ curl --noproxy '' --proxy socks5h://172.17.0.2:40001 -v --connect-timeout 5 --ma
 
 如果 Xray 默认经 Direct 出口，只有特定规则走 WARP，那么 WARP 故障不一定意味着全部 Xray 节点不可用。
 
+## WARP 反复 Connecting：fwmark EPERM 权限不足
+
+日志出现 `IPv4 fwmark rule install: Operation not permitted (os error 1)` 和 `FirewallRepairFailed` 时，说明 WARP 重装策略路由标记时被 Docker 容器权限拒绝。**这不是 DNS、Xray REALITY、容器内存或 WARP 是否有注册数据的问题**。Linux `fwmark` 路由修改需要 `CAP_NET_ADMIN`；新安装的 WARP 容器从 v2026.10.22.8 起显式使用 `--cap-add=NET_ADMIN`，不使用 `--privileged`。
+
+已有容器必须重新创建才能增加能力；**仅更新管理脚本、重启容器或 `warp-cli connect` 并不能追加 capability**。先检查：
+
+```bash
+docker inspect xray-script-warp --format '{{json .HostConfig.CapAdd}}'
+```
+
+若输出 `null` 或不包含 `NET_ADMIN`，更新脚本后在「11. 运维与诊断 → 14. 修复 WARP 容器 NET_ADMIN 权限」输入 `yes` 明确确认。修复只在识别到脚本默认镜像、默认 Docker bridge 网络和原有注册数据挂载路径时才执行。原容器先停用并保留为具名备份（`restart=no`），新容器使用相同镜像及宿主机注册目录；如 Docker IP 改变，通过已有 Xray 配置校验/备份/回滚机制更新 WARP 出站 IP；如迁移阶段失败，尝试恢复原容器。
+
+操作期间走 WARP 的流量可能暂时中断。成功后再次使用菜单 3 验证 `WARP NET_ADMIN: granted` 与 `warp=on`，并连续多次验证出口稳定性。**能力修复不保证 Cloudflare 上游 UDP/MASQUE 网络始终稳定**。备份容器不要与新容器同时运行，否则可能竞争同一 WARP 注册目录。
+
 ## 多机订阅节点不可用
 
 先测试各 VPS 的单机节点和 `proxies.yaml`，再检查中心的远端 Provider。多机菜单提供 Provider 诊断；更新 Xray 凭据后应重新生成订阅并在客户端刷新。订阅 URL 自带访问 Token，勿公开完整 URL。
