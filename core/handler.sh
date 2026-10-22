@@ -239,8 +239,12 @@ function exec_read() {
         # 根据配置项名称进行特定验证
         case "${opt}" in
         version)
-            # 验证 Xray 版本
-            exec_check '--xray' "${result}" || continue
+            # Validate locally: the release ZIP and SHA-256 check will confirm
+            # existence. Do not block manual versions on GitHub API rate limits.
+            if [[ ! "$result" =~ ^[vV]?[0-9]+(\.[0-9]+){1,3}([.-][[:alnum:].-]+)?$ ]]; then
+                echo "error: Enter an Xray version such as v26.10.21." >&2
+                continue
+            fi
             ;;
         email)
             # 验证邮箱地址
