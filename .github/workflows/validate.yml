@@ -20,6 +20,7 @@ jobs:
         run: |
           bash -n install.sh
           bash -n core/generate.sh
+          bash -n core/xray_logs.sh
           bash -n core/xray_mkcp_compat.sh
           bash -n core/handler.sh
           bash -n core/main.sh
@@ -44,6 +45,8 @@ jobs:
 
       - name: Multi-server subscription regression tests
         run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Non-root Xray logfile ownership and backup integration
+        run: sudo python3 -m unittest discover -s tests -p 'test_xray_file_logs.py' -v
 
   xray-real-runtime:
     runs-on: ubuntu-latest
