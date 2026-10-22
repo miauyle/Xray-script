@@ -54,6 +54,8 @@
 
 ## 更新日志
 
+27. v2026.10.22.3 修复升级导致节点不可用的回归：所有 Xray 配置模板默认输出日志到 stdout/systemd journal，避免旧 access.log/error.log 的所有权与 systemd 运行用户不一致造成启动失败；配置校验失败显示原始错误（不回显完整私钥配置）；升级 Xray-core 前保留旧程序，新程序必须通过已有配置校验，原本运行中的服务重启后需稳定存活两秒，否则回滚。新增隔离回归测试及使用 v26.3.27/v26.10.21 真实二进制的 CI 配置与启动检查。**脚本更新不会主动覆盖现有 Xray 配置或自动删除日志，已有问题需按日志诊断后修复。**
+
 26. v2026.10.22.2 修复 Xray-core 更新使用官方安装器时传入过时的 `-u root` 参数，导致“最新版”和“自选版”均报 `unknown option -- -`；升级现改为调用官方支持的 `install --local <zip>`，对已有 systemd 服务附加 `--no-update-service`，避免更换服务运行用户或覆盖自定义配置。新增严格参数与服务保留回归测试。
 
 25. v2026.10.17.2 默认 Mihomo 分流规则增加 Apple 直连：在广告拦截之后、中国大陆规则之前加入 `GEOSITE,apple-cn,DIRECT` 和 `GEOSITE,apple,DIRECT`，覆盖 App Store、iCloud、系统更新等苹果域名及中国特定分发域名。苹果服务即使落到境外 CDN，也不再因为 `MATCH,Proxy` 默认走代理。单机 `clash.yaml` 与中心 `multi_clash.yaml` 一并生效，Shadowrocket 节点订阅不受影响。升级后需要重新生成中心 YAML，并在 Clash Verge Rev 刷新订阅；部分区域限制服务可能需要按需覆盖。
