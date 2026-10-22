@@ -1,497 +1,64 @@
 <!-- Translated by AI -->
-[中文](/README.md) | English
+[中文](../README.md) | English
 
-# Xray Management Script :sparkles:
+# Xray-script
 
-* A pure Shell-based Xray management script
-* Optional configurations:
-  * mKCP (VLESS-mKCP-seed)
-  * Vision (VLESS-Vision-REALITY)
-  * XHTTP (VLESS-XHTTP-REALITY)
-  * Trojan (Trojan-XHTTP-REALITY)
-  * Fallback (includes VLESS-Vision-REALITY and VLESS-XHTTP-REALITY)
-  * SNI (includes Vision_REALITY, XHTTP_REALITY, XHTTP_TLS)
-* SNI configuration uses Nginx to implement SNI traffic splitting, suitable for CDN routing, upstream/downstream separation, and multi-site coexistence
-* SNI share links support upstream/downstream separation (upstream xhttp+TLS+CDN | downstream xhttp+Reality, upstream xhttp+Reality | downstream xhttp+TLS+CDN)
-* SNI configuration supports managing custom domains and reverse proxy apps, with independent certificates, site configs, stream mappings, and UDS per site
-* Rule configuration and custom input:
-  * Block BitTorrent traffic (optional)
-  * Block China-bound IP traffic (optional)
-  * Ad blocking (optional)
-  * Add custom WARP Proxy routing rules
-  * Add custom blocking routing rules
-* Toggle Cloudflare WARP Proxy ( :whale: Docker deployment)
-* Toggle geodata auto-update
-* Xray port defaults and custom input:
-  * VLESS-mKCP: randomly generated
-  * ALL-REALITY: 443
-* UUID defaults and custom input:
-  * Randomly generated
-  * Custom standard UUID input
-  * Non-standard UUID mapped to UUID
-* kcp(seed) and trojan(password) defaults and custom input:
-  * Randomly generated (example: cw-GEMDYgwIV3_g#)
-  * Custom input
-* target defaults and custom input:
-  * Randomly selected from serverNames.json
-  * TLSv1.3 and H2 validation for custom target
-  * Automatic serverNames lookup for custom target
-* shortId defaults and custom input:
-  * Random generation (default two shortIds, e.g. 01234567, 0123456789abcdef)
-  * Custom shortId input
-  * If input is 0 to 8, shortIds with length 0-16 are auto-generated
-  * Supports multiple values separated by commas
-* path defaults and custom input:
-  * Randomly generated (example: /8ugSUeNJ.9OEnTErb.dVZMUAFu)
-  * Custom input (example: /8ugSUeNJ, with or without `/`)
+A Shell-based installer and manager for Xray-core, including REALITY / XHTTP configurations, subscriptions, routing, and diagnostics.
 
-## FAQ
+**Current script version: `v2026.10.22.6`** · [Full changelog](../CHANGELOG.en.md)
 
-1. If installation succeeds but service is unusable, check whether the server ports are open. You can verify using `https://tcp.ping.pe/ip:port`.
-2. Before using SNI configuration, ensure VPS HTTP (80) and HTTPS (443) ports are open.
-3. Before using SNI configuration, do not enable CDN protection, otherwise SSL issuance may fail.
-4. For upstream/downstream separation details, see [XHTTP: Beyond REALITY][XHTTP] and [xhttp 五合一配置][xhttp 五合一配置].
-5. If you encounter 【Could not get nonce, let's try again】 while issuing certificates with SNI, check the [ZeroSSL status page](https://status.zerossl.com/). Most likely ZeroSSL 【Free ACME Service】 is in 【Service disruption】 or 【Service outage】.
+## Quick start
 
-## Changelog
+Run on a Linux VPS with appropriate administrative privileges. Check SSH access and cloud firewall rules, and back up existing configurations before installation.
 
-29. v2026.10.22.5 fixes fresh **Xray 26.10.21** installs failing with `unsupported config file extension`. Temporary files for live config application, rollback and mKCP compatibility probes now end in `.json`; newer Xray releases inspect the extension despite `-format=json`. Both v26.3.27 and v26.10.21 are covered by real binary apply/rollback tests. Mihomo REALITY nodes include `reality-opts.support-x25519mlkem768: true` only when the **installed** Xray core is v26.9.8 or newer; old/unknown versions are left unchanged. The flag propagates through single-server `clash.yaml`, local `proxies.yaml`, and the center's local entries in `multi_clash.yaml`; each remote provider independently emits its own compatible option. `client-fingerprint: chrome` remains in place. Raw VLESS URI and Shadowrocket subscription handling are unchanged. Regenerate your YAML subscriptions and refresh the client after updating the script.
-
-28. v2026.10.22.4 restores `/var/log/xray/access.log` and `/var/log/xray/error.log` in all six protocol templates. Before Xray upgrade, config change, and service start, inspect the effective systemd User/Group and ensure log paths are writable. For incompatible files, preserve original contents in timestamped root-only backups before recreating mode-0640 files for the configured service identity. Already writable logs are never truncated or rotated by this routine. Symlinks, hardlinks, and unexpected ownership fail closed. The Operations log view includes both access and error files. CI exercises actual root-to-nobody migration and real Xray file-log creation.
-
-
-27. v2026.10.22.3 hardens Xray-core upgrades: generated templates log to stdout/systemd journal rather than writable files, avoiding stale access.log/error.log ownership failures; validation failures now show the underlying Xray error without dumping the candidate configuration. Core upgrades verify the previously installed configuration, restart an already-running service, check that it survives two seconds, and restore the old binary on failure. Deprecated `kcpSettings.seed` is migrated to FinalMask using the same password, probing the active core to select `mkcp-legacy` or `mkcp-aes128gcm`; older share links remain available for legacy clients, while modern Xray clients must use FinalMask configuration. CI adds regression tests plus actual v26.3.27/v26.10.21 binary/template smoke checks. Existing configurations and logs are not automatically overwritten or deleted by a script update.
-
-25. v2026.10.17.2 adds `GEOSITE,apple-cn,DIRECT` and `GEOSITE,apple,DIRECT` to generated Mihomo routing between ad blocking and China rules, covering App Store, iCloud and Apple updates even when overseas CDN IPs are used. Both standalone and central aggregate subscriptions inherit this change. Refresh YAML on the center and reload Clash Verge Rev to apply; Shadowrocket node-only subscriptions are unaffected. Some region-sensitive services may still need a targeted rule override.
-
-24. v2026.10.17.1 improves the compact Mihomo default routing rules. Route GEOSITE private and local-domain suffixes plus GEOIP private directly, then reject known ad domains, route mainland China domains/IPs directly, and use MATCH,Proxy for everything else. Replace GEOIP,lan with GEOIP,private and allow DNS resolution for GEOIP,CN. Standalone and center configurations inherit the same rules; no DNS/TUN overrides are added. Regenerate VPS YAML and refresh the client subscription to apply.
-
-23. v2026.10.16.5 adds center menu item 8 to list configured remote VPS labels and their full Provider URLs on demand. URL bearer tokens remain hidden from routine status output. No subscription changes.
-
-22. v2026.10.16.4 replaces equal-peer setup with a single center. Each standalone VPS independently publishes `proxies.yaml` under its original single subscription token; only the selected center stores peers. Old Provider token paths remain available during migration, but there is no new dedicated Provider token rotation.
-
-21. v2026.10.16.3 switches generated Clash/Mihomo `geox-url` GeoSite and GeoIP sources from the optional testingcf.jsdelivr.net mirror to official MetaCubeX GitHub Release assets. This avoids relying on a CDN mirror that may deliver non-protobuf content in some networks. The error `invalid GeoSite database file: proto: cannot parse invalid wire-format data` may also require deleting a previously corrupted client cache. This does not change Xray nodes; update the subscription before retrying. GitHub reachability varies by network.
-
-
-20. v2026.10.16.2 adds consented local IPv4 firewall port checks before Xray/HTTP listeners, opt-in conntrack_max runtime + boot persistence, and separate managed swap files (1–32 GiB). Oracle Security List/NSG cloud ingress still requires separate configuration. Includes mocked integration tests.
-
-### Oracle Ubuntu host management
-
-Operations & Diagnostics offers firewall (10), conntrack_max (11), and Swap (12). Host firewall rules are never opened without a terminal confirmation. With UFW active, UFW persists the rule; otherwise iptables rules are inserted without flushing any existing rules or modifying SSH and are persisted through a dedicated xray-script-firewall.service. Cloud VCN Security List/NSG rules remain a separate requirement; a host firewall ACCEPT rule does not prove external reachability.
-
-conntrack_max uses sysctl -w and verifies the kernel value immediately, while dedicated sysctl.d and modules-load.d files maintain the setting after reboot. The original kernel value is backed up for restore. Swap uses /var/lib/xray-script/swapfile, verifies disk availability, permissions, mkswap/swapon, and adds only a managed fstab entry. Removal affects only managed swap and fails safely if swapoff is rejected. Btrfs automatic swap creation is unsupported.
-
-CLI from installed repository: bash core/handler.sh --host firewall status 443 tcp ; --host conntrack set 16384 ; --host swap add 1.
-
-
-19. v2026.10.16.1 fixes stale remote-node credentials in multi-server subscriptions. After a successful Xray regeneration, existing published single and multi subscriptions are refreshed without rolling back working Xray on refresh failure. Mihomo retries remote Providers every five minutes; Shadowrocket only falls back to cached remote nodes for up to 12 hours. Add **Multi-server subscriptions → 9. Diagnose Providers** to compare published UUID/Reality public keys with running Xray and verify remote Provider reachability without logging secrets. Clients must still refresh their subscriptions and Providers.
-
-
-
-18. v2026.10.15.3 adds a single Shadowrocket subscription URL for all VPS peers: reuse the existing peer list and MULTI_TOKEN, export Base64 VLESS Reality/XHTTP links, retain last-known-good remote nodes, and refresh Nginx snapshots with a five-minute one-shot timer.
-
-
-17. v2026.10.15.2 fixes false failures reported after successful Xray config generation.
-   1. Explicitly return success from `handler_xray_config` when there is no pending script-state snapshot; the optional EXIT-trap cleanup must not cause a nonzero result.
-   2. Stop printing Reality Private Keys to installation logs.
-   3. Add regression tests for fresh installation and pending snapshot handling.
-
-16. v2026.10.15.1 adds optional TCP BBR management and updates the version previously missed when multi-VPS subscriptions were introduced.
-   1. Add optional BBR + fq status/enable/restore under Operations & Diagnostics.
-   2. Check kernel support, avoid kernel upgrades and Xray restarts, and persist only in Xray-script's own `/etc/sysctl.d/99-xray-script-bbr.conf` drop-in.
-   3. Save original congestion control and qdisc, attempt rollback on failure and safely restore the original values.
-   4. Include the equal-peer `multi_clash.yaml`, Mihomo Proxy Providers, and scoped tokens delivered in PR #15 in the version notes, with BBR regression tests.
-
-
-15. v2026.09.23.11 fixes WARP health checks accidentally bypassing the configured proxy.
-   1. Fix `ops_warp_trace` using `--noproxy '*'`, which disabled the explicit SOCKS proxy and incorrectly reported the VPS direct egress.
-   2. Use `--noproxy \"\"` plus explicit `socks5h://<container>:40001` so WARP is forced even when `NO_PROXY` exists in the environment.
-   3. Add WARP client status/mode to the status view and separate `SOCKS reachable` from `WARP data path`.
-   4. Doctor now requires Cloudflare trace to return `warp=on` or `warp=plus`; `warp=off` is a failure.
-14. v2026.09.23.10 carries forward the remaining useful Xray restart reliability improvements from superseded PR #11.
-   1. After restart/start, check the active state up to five times with short delays to avoid transient systemd readiness false negatives.
-   2. When a post-apply restart fails, print `systemctl status xray` and the latest 40 journal lines before automatic rollback.
-   3. Manual Xray restart now uses the same checked restart path; failures are no longer silently ignored and include the same diagnostics.
-   4. Ensure the Xray systemd unit is enabled after a successful start/restart.
-13. v2026.09.23.9 completes the operations and safety-management features.
-   1. Finish `apply_xray_config` migration with validation, automatic backup, atomic replace, and restart-failure rollback.
-   2. Add backup restore, config export/import, Doctor, and Xray/WARP/Clash log views.
-   3. Add WARP container/SOCKS/egress IP/country checks and optional Direct fallback using Xray observatory + balancer.
-   4. Unify Direct/WARP/Block routing management and persist custom routing state.
-   5. Add Auto/IPv4/IPv6 Direct egress policy and preserve it across protocol regeneration.
-   6. Add a central Operations & Diagnostics menu; automatic backups now pair script state so protocol reconfiguration can roll back consistently.
-   7. Add lightweight CI syntax validation for core Shell, JSON, and the Clash HTTP Python service.
-12. v2026.09.23.8 introduces the unified `apply_xray_config` safe-write entry point and migrates routing changes first.
-   1. Stage the candidate config in the same directory as the live file and validate it with `xray run -test -format=json`.
-   2. After validation, back up the current config and preserve the live file's permissions and owner/group.
-   3. Replace the live config with a same-filesystem atomic `mv`, avoiding partial writes from `cat > config.json` style updates.
-   4. Routing add, single-entry delete, and group clear now call `apply_xray_config` directly with operation context.
-   5. Keep `persist_xray_config` temporarily as a compatibility wrapper; full config regeneration and WARP call sites can migrate incrementally later.
-11. v2026.09.23.7 adds automatic Xray config backups and shorter Clash/Mihomo subscription tokens.
-   1. Before overwriting `/usr/local/etc/xray/config.json`, save the current config under `~/.xray-script/backups/xray/`.
-   2. Backups use timestamp + random-suffix names, mode `600`, with the backup directory set to `700`.
-   3. Keep only the latest 10 backups by default; failure to prune older backups warns but does not block the current config update.
-   4. If backup creation or permission hardening fails, abort the config change instead of overwriting the live config without a backup.
-   5. New Clash/Mihomo subscription tokens use 128-bit URL-safe Base64 and are about 22 characters long; existing long tokens are kept until the user rotates the subscription token.
-10. v2026.09.23.6 upgrades the Clash Verge Rev / Mihomo config generator to v2.
-   1. Enable HTTP/TLS/QUIC sniffing by default with common skip domains.
-   2. Add a manual `Proxy` group and an `Auto` URL-test group with 300s interval, lazy testing, 50ms tolerance, and HTTP 204 validation.
-   3. Enable `profile.store-selected`, `unified-delay`, and `tcp-concurrent`; disable IPv6 by default.
-   4. Enable automatic Mihomo GEO updates with the `memconservative` loader and MetaCubeX GeoIP/GeoSite data.
-   5. Add default rules for ad rejection, LAN direct, Steam/Microsoft China direct, CN domains/IPs direct, and send everything else to `Proxy`.
-   6. Do not force TUN/DNS into the subscription so local Clash Verge networking preferences remain client-managed.
-9. v2026.09.23.5 improves startup diagnostics and self-test reliability for the lightweight Clash/Mihomo HTTP subscription backend.
-   1. Local subscription checks now force `curl --noproxy '*'` so `127.0.0.1` health checks cannot be redirected through `http_proxy/HTTP_PROXY`.
-   2. Startup performs several short retries to avoid false failures while the systemd service is still becoming ready.
-   3. On systemd startup or local self-test failure, the script prints `systemctl status` and recent `journalctl` output before rollback.
-   4. Self-test failures also display listeners on the selected port to distinguish a service-start problem from a request-path problem.
-8. v2026.09.23.4 fixes the incorrect coupling between Clash/Mihomo remote subscriptions and Xray SNI mode.
-   1. Compatible Vision, XHTTP, Fallback, and SNI configs can all publish remote subscriptions; `.xray.tag == SNI` is no longer required.
-   2. Subscription hosting is independent from the Xray data path: reuse an existing Nginx HTTPS site when available, otherwise optionally start a lightweight HTTP static subscription service on port 80 by default or a user-selected port.
-   3. The lightweight HTTP backend serves only the random-token `clash.yaml` path, has no directory listing or web UI, and is managed by systemd.
-   4. The HTTP backend self-tests the local subscription URL after startup; port conflicts or startup failures do not produce an enabled subscription state.
-   5. Plain HTTP is unencrypted and the subscription contains proxy credentials, so the script displays an explicit warning before enabling it.
-7. v2026.09.23.3 adds Clash Verge Rev / Mihomo config and subscription support.
-   1. Generates an importable Mihomo YAML from the current Xray config.
-   2. Supports Vision+Reality, VLESS+XHTTP+Reality, Fallback, and compatible Reality/XHTTP/TLS-CDN nodes in SNI mode.
-   3. SNI + Nginx can publish a random-token HTTPS subscription without adding a resident service.
-   4. Supports viewing, refreshing, rotating the subscription token, and disabling remote delivery; Nginx changes are backed up and rolled back when validation fails.
-   5. Mihomo currently does not support VLESS+mKCP or Trojan+XHTTP, so the script explicitly refuses to generate invalid configs for those combinations.
-6. v2026.09.23.2 aligns the fork's maintainer and repository branding.
-   1. README and terminal banners now display `miauyle/Xray-script`.
-   2. Script repository/maintainer metadata now points to the current fork.
-   3. Original MIT copyright notices remain preserved in LICENSE and required copyright notices.
-5. v2026.09.23.1 adds management for existing custom routing rules.
-   1. Lists `block-ip`, `block-domain`, `warp-ip`, and `warp-domain` custom rules.
-   2. Deletes individual entries by index and removes an empty rule group automatically.
-   3. Clears an entire custom rule group with confirmation.
-   4. Delete/clear changes are validated by Xray before the live config is replaced and the service is restarted.
-4. v2026.09.23 fixes custom routing rule writes and hardens Xray config updates.
-   1. Fixes WARP/block routing input being read from `XRAY_CONFIG` instead of `CONFIG_DATA`, which could turn a valid domain into an empty string entry.
-   2. Routing input now trims whitespace, drops empty values, and deduplicates entries; empty rules are rejected.
-   3. Candidate Xray configs are validated before replacing the live config; validation failure keeps the existing config unchanged.
-   4. Installation, update, and config download URLs now stay on `miauyle/Xray-script`.
-1. v2025.11.19 resolves the issue where WARP was enabled without log limits, causing container logs to keep growing and eventually fill up disk space.
-   1. Users who already enabled WARP routing can select 【Reset WARP Proxy】 in 【Manage Configuration】 -> 【Routing Management】 to clear container logs and reset WARP Proxy.
-   2. Log limits have been added; just enable WARP directly when needed.
-2. v2026.03.01 adds CA vendor switching. When switching CA vendor, the script force re-issues certificates for existing domains (`domain`, `cdn`, and `custom_sites[].domain`). It writes the new CA only after all re-issues succeed; if any step fails, it automatically rolls back to the original CA and restores related settings, preventing acme auto-renew from breaking.
-   1. Force re-issue bypasses the "Domains not changed" check (acme.sh skip scenario).
-   2. Watch out for CA issuance rate limits (for example, Let's Encrypt limits).
-3. v2026.03.17 adds SNI custom domain and reverse proxy app management, allowing multiple extra HTTPS reverse proxy sites without affecting the existing `Reality(domain)` and `CDN(cdn)` sites.
-   1. Menu path: `Manage Configuration -> SNI Configuration -> Manage custom domains and reverse proxy apps`
-   2. Supports list / add / edit / delete, with an independent certificate, `sites-available/<domain>.conf`, stream mapping, and UDS for each custom site.
-   3. `stream.conf` is rebuilt from `domain`, `cdn`, and `custom_sites`; UDS names use the first `12` hex chars of `SHA-256(domain)` plus the port.
-   4. Proxy targets support port-only input or full `http(s)://host:port` URLs; port-only input is normalized to `http://127.0.0.1:<port>`; URLs containing `path`, `query`, or `fragment` are rejected.
-   5. Editing only the upstream target skips certificate re-issuance; changing the domain issues the new certificate first and then switches over with rollback on failure; deleting a site also removes the site config, symlink, renew record, and certificate directory.
-   6. A custom site domain must not duplicate `domain`, `cdn`, or another custom site domain; CA switching and "force renew all certificates" also cover custom site domains.
-   7. Custom sites are "pure reverse proxy sites". They do not include Xray `xhttp/grpc` paths and are not managed by the Cloudreve integration; the proxy layer does not inject an extra `Content-Security-Policy`, so CSP should be controlled by the upstream application.
-
-## Share Links
-
-Implemented based on [VMessAEAD / VLESS share link proposal](https://github.com/XTLS/Xray-core/discussions/716) and [v2rayN](https://github.com/2dust/v2rayN). If other clients do not work, adjust based on the generated share link manually.
-
-In SNI configuration, CDN share links use H2 as default ALPN. If you need H3, modify it in your client.
-
-### Clash Verge Rev / Mihomo
-
-**Config generator v2 defaults:**
-
-- Sniffer: HTTP / TLS / QUIC.
-- Policy groups: manual `Proxy` + `Auto` URL test.
-- GEO: automatic GeoIP / GeoSite updates.
-- Routing: reject ads, direct LAN, direct Steam/Microsoft China services, direct CN domains/IPs, then send the rest to `Proxy`.
-- IPv6 disabled by default; `unified-delay`, `tcp-concurrent`, and `profile.store-selected` enabled.
-- TUN / DNS are intentionally omitted and remain managed by the local Clash Verge client.
-
-The main menu now includes `Clash/Mihomo Config & Subscription`:
-
-- `Generate/refresh local YAML`: writes `~/.xray-script/clash/clash.yaml`.
-- `Enable/refresh remote subscription`: independent of the Xray protocol type; reuses an existing Nginx HTTPS site when available, otherwise can start a lightweight HTTP static subscription service.
-- `Show subscription info`: prints the local YAML path and current remote URL.
-- `Rotate subscription URL token`: invalidates the old URL immediately.
-- `Disable remote subscription`: disables the active subscription backend while keeping the local YAML.
-
-Remote subscription hosting is independent from the Vision/Reality/XHTTP data path. With an existing Nginx HTTPS site, URLs look like `https://domain/sub/<random-token>/clash.yaml`; without reusable HTTPS, the optional lightweight HTTP backend prompts for a port. Press Enter for the default port `80`, or enter another value from `1-65535`. Port 80 produces `http://server-ip/sub/<random-token>/clash.yaml`; a custom port produces `http://server-ip:<port>/sub/<random-token>/clash.yaml`. The script does not silently choose another port when the selected one is busy. Plain HTTP is unencrypted and the subscription contains proxy credentials, so use it only if you accept that risk and rotate the token if the URL may have leaked.
-
-The generator currently supports Vision+Reality, VLESS+XHTTP+Reality, Fallback, and compatible VLESS nodes in SNI mode. Mihomo does not currently support VLESS+mKCP or Trojan+XHTTP, so those combinations are rejected instead of generating misleading configs.
-
-## Automatic Xray config backups
-
-Before replacing the live Xray configuration, the script automatically saves the current version:
-
-- Live config: `/usr/local/etc/xray/config.json`
-- Backup directory: `~/.xray-script/backups/xray/`
-- Retention: latest 10 backups
-- No empty backup is created on first install when the live config does not exist yet
-- This version adds the backup mechanism only; there is no restore menu yet
-
-A backup creation or permission failure aborts the config change. Failure to prune an older backup only emits a warning.
-
-
-## One center, independent VPS Providers (v2026.10.16.4)
-
-Each regular VPS publishes both /sub/<single-token>/clash.yaml (standalone Mihomo subscription) and /sub/<single-token>/proxies.yaml (pure Provider) using the SAME existing single token. It does not enable aggregation or track any other servers.
-
-Enable the aggregation center on ONE VPS only after its standalone subscription is configured. Add the other standalone VPS Provider URLs in the center's menu (Clash → Central aggregator). The center keeps its existing multi-server.json and multi-token and publishes multi_clash.yaml for Mihomo and multi_nodes.txt for Shadowrocket. The center may itself be a proxy VPS. A center outage interrupts subscription updates but does not normally disconnect cached client proxy nodes. There is no automatic center failover.
-
-For migration: upgrade all VPSs, regenerate each standalone YAML, refresh each VPS's remote subscription publication (restart the existing Python HTTP server or reload Nginx), update remote Provider URLs on the chosen center, then disable aggregation on every other VPS. The upgrade does NOT silently disable previously enabled peer configurations. Old Provider token URLs remain readable temporarily for compatibility; new standalone Providers use their ordinary single-token URL. Do not revoke legacy credentials until the center uses the new URLs. No dedicated Provider-token rotation menu remains.
-
-The center menu item 8 (`Clash → Central aggregator → List remote Providers`) displays all stored remote VPS names and full Provider URLs, including bearer tokens, only when explicitly requested. Never share its output or screenshots. Routine center status continues hiding remote credentials.
-
-Mihomo Proxy Providers are updated by the client and Shadowrocket subscriptions are aggregated by the center. Only the center maintains a peer list, and only the center exposes the multi-server subscription URL. Shadowrocket XHTTP compatibility still requires real client testing.
-
-
-## Operations & Diagnostics
-
-Main-menu item **11. Operations & Diagnostics** provides the maintenance tools in one place:
-
-- **Doctor** checks Xray JSON/core validation, systemd status, listening port, backups, WARP container/SOCKS egress, WARP fallback wiring, and the Clash HTTP subscription service.
-- **Logs** shows recent Xray systemd/error.log, WARP Docker logs, and Clash subscription service logs.
-- **WARP status & egress** queries Cloudflare trace through the WARP SOCKS path and reports container status, egress IP, location, and WARP state.
-- **WARP Direct fallback** uses Xray `observatory + balancer.fallbackTag=direct`; only rules explicitly routed to WARP participate.
-- **Backup restore** keeps 10 automatic Xray backups by default. New backups also pair the script state; legacy Xray-only backups remain restorable.
-- **Export/import** bundles script + Xray config into a mode-`600` `tar.gz`. WARP container networking is host-local, so after moving to another VPS run Doctor/WARP reset to reconfirm it.
-- **Direct egress family** selects Auto / IPv4 / IPv6 through Xray Freedom `sockopt.domainStrategy`.
-- **TCP BBR** optionally displays the current state, enables persistent BBR + fq, or restores original settings without changing Xray.
-
-### TCP BBR (optional)
-
-Choose **11. Operations & Diagnostics → 9. TCP BBR network tuning** to inspect, enable, or restore settings. It is **not enabled automatically** during Xray installation or updates.
-
-The script checks kernel availability, optionally tries `modprobe tcp_bbr` (without installing a kernel), and sets TCP BBR plus the `fq` default qdisc. Only `/etc/sysctl.d/99-xray-script-bbr.conf` is written, and previous runtime values are backed up to `~/.xray-script/network/bbr-original.conf`. Other sysctl configuration files remain untouched. It refuses to overwrite an unrecognized drop-in or operate without a valid original-value backup.
-
-CLI: `bash core/handler.sh --bbr status|enable|restore` (from the installed repository; root is required to enable or restore). BBR does not guarantee faster routes or fix physical packet loss. Other sysctl drop-ins can still override these values at boot.
-
-### Safe apply and automatic rollback
-
-All Xray config writes converge on `apply_xray_config`:
-
-```text
-candidate → xray -test → automatic backup → atomic replace → restart check
-                                                        ↓ failure
-                                      restore old Xray + script state
+```bash
+wget -O "$HOME/Xray-script.sh" https://raw.githubusercontent.com/miauyle/Xray-script/main/install.sh
+bash "$HOME/Xray-script.sh"
 ```
 
-Routing, protocol regeneration, WARP operations, backup restore/import, and Direct/WARP fallback reuse this path. Protocol regeneration keeps a pending script-state snapshot across handler processes and clears it only after the new Xray config is successfully applied.
+Optional direct setup:
 
-
-## How to Use
-
-* Download
-
-  ```sh
-  wget --no-check-certificate -O ${HOME}/Xray-script.sh https://raw.githubusercontent.com/miauyle/Xray-script/main/install.sh
-  ```
-
-* Usage
-  * Launch UI
-
-    ```sh
-    bash ${HOME}/Xray-script.sh
-    ```
-
-  * Quick install Vision
-
-    ```sh
-    bash ${HOME}/Xray-script.sh --vision
-    ```
-
-  * Quick install XHTTP
-
-    ```sh
-    bash ${HOME}/Xray-script.sh --xhttp
-    ```
-
-  * Quick install Fallback
-
-    ```sh
-    bash ${HOME}/Xray-script.sh --fallback
-    ```
-
-* Quick start (UI)
-
-  ```sh
-  wget --no-check-certificate -O ${HOME}/Xray-script.sh https://raw.githubusercontent.com/miauyle/Xray-script/main/install.sh && bash ${HOME}/Xray-script.sh
-  ```
-
-## Script UI
-
-```sh
- __   __  _    _   _______   _______   _____  
- \ \ / / | |  | | |__   __| |__   __| |  __ \ 
-  \ V /  | |__| |    | |       | |    | |__) |
-   > <   |  __  |    | |       | |    |  ___/ 
-  / . \  | |  | |    | |       | |    | |     
- /_/ \_\ |_|  |_|    |_|       |_|    |_|     
-
-Maintained by miauyle | https://github.com/miauyle/Xray-script
-
--------------------------------------------
-Xray       : v25.7.26
-CONFIG     : VLESS-Vision-REALITY
-WARP Proxy : Running
--------------------------------------------
-
---------------- Xray-script ---------------
- Version      : v2025-07-25
- Description  : Xray Management Script
------------------ Install -----------------
-1. Full installation
-2. Install/Update only
-3. Uninstall
------------------ Operation ----------------
-4. Start
-5. Stop
-6. Restart
----------------- Configuration -------------
-7. Share links and QR codes
-8. Statistics
-9. Manage configuration
--------------------------------------------
-0. Exit
+```bash
+bash "$HOME/Xray-script.sh" --vision   # VLESS Vision REALITY
+bash "$HOME/Xray-script.sh" --xhttp    # VLESS XHTTP REALITY
+bash "$HOME/Xray-script.sh" --fallback # Vision + XHTTP
 ```
 
-## Tested Systems
+See [Installation and Usage](../docs/INSTALLATION.en.md) for supported systems, SNI setup, commands, and requirements.
 
-| Platform | Version    |
-| -------- | ---------- |
-| Debian   | 10, 11, 12 |
-| Ubuntu   | 20, 22, 24 |
-| CentOS   | 7, 8, 9    |
-| Rocky    | 8, 9       |
+## Main features
 
-The distributions above were tested on Vultr.
+| Area | Capabilities |
+| --- | --- |
+| Xray modes | Vision, XHTTP, Fallback, SNI, mKCP and Trojan options |
+| Subscriptions | VLESS links / QR codes, Mihomo YAML, Shadowrocket node subscriptions |
+| Multi-VPS | One aggregation center with independently published VPS Providers |
+| Routing | Direct / Block / WARP rules, optional WARP egress and Direct fallback |
+| Operations | Config validation and rollback, backups, Doctor, logs, BBR, Swap, conntrack and firewall checks |
+| Nginx / SNI | TLS/CDN routing, custom domains and reverse proxy sites |
 
-Other Debian-based and Red Hat-based systems may work, but are untested and may have issues.
+For the details, read [Features and Configuration](../docs/FEATURES.en.md).
 
-## Installation Time Notes
+## Subscription notes
 
-SNI configuration is intended for long-term use after one setup, and is not suitable for repeated reinstall/reset, which consumes significant time. If you need to change configuration or domain, use the options in the management UI.
+- **Single VPS:** use menu 10 to generate Mihomo YAML and optionally publish a remote subscription.
+- **Multiple VPSs:** each VPS publishes a Provider; only one VPS manages the central `multi_clash.yaml` and Shadowrocket aggregation.
+- **Security:** subscription URLs carry access tokens; publishing over HTTP does not encrypt credentials.
+- **Compatibility:** newer Xray REALITY versions may require X25519MLKEM768 on Mihomo. The generator sets this based on the server core version; Shadowrocket must be tested separately.
 
-After switching to a non-SNI config, Nginx will be stopped but kept on the machine. Re-enabling SNI will not reinstall Nginx.
+## Documentation
 
-### Installation Time Reference
+| Guide | Scope |
+| --- | --- |
+| [Installation and Usage](../docs/INSTALLATION.en.md) | Commands, menu, tested systems, duration, dependencies |
+| [Features and Configuration](../docs/FEATURES.en.md) | Protocols, SNI, subscriptions, multi-VPS, backups and operations |
+| [Troubleshooting](../docs/TROUBLESHOOTING.en.md) | Connectivity, REALITY, Shadowrocket, WARP and subscriptions |
+| [Changelog](../CHANGELOG.en.md) | Historical versions and migration notes |
 
-Installation flow:
+## Safety
 
-Update package index -> install dependencies -> [install Docker] -> [install Cloudreve] -> [install Cloudflare-warp] -> install Xray -> install Nginx -> issue certificate -> apply configuration
+This script manages network services and configuration files. Back up existing state; cloud Security Lists / NSGs must be configured separately. Updating the script does not automatically regenerate running Xray configuration or subscriptions.
 
-**Average install time on a 1-core 1GB server (for reference only):**
+Built around [Xray-core](https://github.com/XTLS/Xray-core), [REALITY](https://github.com/XTLS/REALITY) and [XHTTP](https://github.com/XTLS/Xray-core/discussions/4113). See the [full acknowledgements](../docs/FEATURES.en.md).
 
-| Item                | Duration  |
-| ------------------- | --------- |
-| Update package index| 0-10 min  |
-| Install dependencies| 0-5 min   |
-| Install Docker      | 1-2 min   |
-| Install Cloudreve   | 3-5 min   |
-| Install Cloudflare-warp | 3-5 min |
-| Install Xray        | < 0.5 min |
-| Install Nginx       | 13-15 min |
-| Issue certificate   | 1-2 min   |
-| Apply configuration | < 0.5 min |
-
-### Why does SNI installation take so long?
-
-Nginx in this script is managed by source compilation.
-
-Compared with installing prebuilt binaries, compilation advantages are:
-
-1. Better runtime performance (compiled with -O3 optimization)
-2. Newer software versions
-
-The downside is long compilation time.
-
-## Install Paths
-
-**Xray-script:** `/usr/local/xray-script`
-
-**Nginx:** `/usr/local/nginx`
-
-**Cloudreve:** `$HOME/.xray-script/docker/cloudreve`
-
-**Cloudflare-warp:** `$HOME/.xray-script/docker/warp`
-
-**Xray:** See **[Xray-install](https://github.com/XTLS/Xray-install)**
-
-## Dependency List
-
-When using SNI configuration, the script may install the following dependencies:
-
-| Purpose                            | Debian-based                         | Red Hat-based        |
-| ---------------------------------- | ------------------------------------ | -------------------- |
-| yumdb set (mark package manually installed) |                              | yum-utils            |
-| dnf config-manager                 |                                      | dnf-plugins-core     |
-| IP retrieval                       | iproute2                             | iproute              |
-| DNS resolution                     | dnsutils                             | bind-utils           |
-| wget                               | wget                                 | wget                 |
-| curl                               | curl                                 | curl                 |
-| wget/curl https                    | ca-certificates                      | ca-certificates      |
-| kill/pkill/ps/sysctl/free          | procps                               | procps-ng            |
-| epel repository                    |                                      | epel-release         |
-| epel repository                    |                                      | epel-next-release    |
-| remi repository                    |                                      | remi-release         |
-| Firewall                           | ufw                                  | firewalld            |
-| **Build basics:**                  |                                      |                      |
-| Download source files              | wget                                 | wget                 |
-| Extract tar source files           | tar                                  | tar                  |
-| Extract tar.gz source files        | gzip                                 | gzip                 |
-| gcc                                | gcc                                  | gcc                  |
-| g++                                | g++                                  | gcc-c++              |
-| make                               | make                                 | make                 |
-| **acme.sh dependencies:**          |                                      |                      |
-|                                    | curl                                 | curl                 |
-|                                    | openssl                              | openssl              |
-|                                    | cron                                 | crontabs             |
-| **Build openssl:**                 |                                      |                      |
-|                                    | perl-base (included in libperl-dev) | perl-IPC-Cmd         |
-|                                    | perl-modules-5.32 (included in libperl-dev) | perl-Getopt-Long |
-|                                    | libperl5.32 (included in libperl-dev) | perl-Data-Dumper   |
-|                                    |                                      | perl-FindBin         |
-| **Build Brotli:**                  |                                      |                      |
-|                                    | git                                  | git                  |
-|                                    | libbrotli-dev                        | brotli-devel         |
-| **Build Nginx:**                   |                                      |                      |
-|                                    | libpcre2-dev                         | pcre2-devel          |
-|                                    | zlib1g-dev                           | zlib-devel           |
-| --with-http_xslt_module            | libxml2-dev                          | libxml2-devel        |
-| --with-http_xslt_module            | libxslt1-dev                         | libxslt-devel        |
-| --with-http_image_filter_module    | libgd-dev                            | gd-devel             |
-| --with-google_perftools_module     | libgoogle-perftools-dev              | gperftools-devel     |
-| --with-http_geoip_module           | libgeoip-dev                         | geoip-devel          |
-| --with-http_perl_module            |                                      | perl-ExtUtils-Embed  |
-|                                    | libperl-dev                          | perl-devel           |
-
-## Acknowledgements
-
-[Xray-core][Xray-core]
-
-[REALITY][REALITY]
-
-[XHTTP: Beyond REALITY][XHTTP]
-
-[integrated-examples][lxhao61/integrated-examples]
-
-[xhttp 五合一配置][xhttp 五合一配置]
-
-[部署 Cloudflare WARP Proxy][haoel]
-
-[cloudflare-warp 镜像][e7h4n]
-
-[V2Ray 路由规则文件加强版][v2ray-rules-dat]
-
-[kirin10000/Xray-script][kirin10000/Xray-script]
-
-[Cloudreve][cloudreve]
-
-**This script is for study and communication only. Do not use it for illegal purposes. Illegal acts on the network are still illegal and will be punished by law.**
-
-[Xray-core]: https://github.com/XTLS/Xray-core (THE NEXT FUTURE)
-[REALITY]: https://github.com/XTLS/REALITY (THE NEXT FUTURE)
-[XHTTP]: https://github.com/XTLS/Xray-core/discussions/4113 (XHTTP: Beyond REALITY)
-[lxhao61/integrated-examples]: https://github.com/lxhao61/integrated-examples (以 V2Ray（v4 版） 或 Xray、Nginx 或 Caddy（v2 版）、Hysteria 等打造常用科学上网的优化配置及最优组合示例，且提供集成特定插件的 Caddy（v2 版） 文件，分享给大家食用及自己备份。)
-[xhttp 五合一配置]: https://github.com/XTLS/Xray-core/discussions/4118 (xhttp 五合一配置 \( reality 直连与过 CDN 共存, 附小白可抄的配置\))
-[haoel]: https://github.com/haoel/haoel.github.io#943-docker-%E4%BB%A3%E7%90%86 (使用 Docker 快速部署 Cloudflare WARP Proxy)
-[e7h4n]: https://github.com/e7h4n/cloudflare-warp (cloudflare-warp 镜像)
-[v2ray-rules-dat]: https://github.com/Loyalsoldier/v2ray-rules-dat (V2Ray 路由规则文件加强版)
-[kirin10000/Xray-script]: https://github.com/kirin10000/Xray-script (kirin10000/Xray-script)
-[cloudreve]: https://github.com/cloudreve/cloudreve (cloudreve)
+For lawful study, communication and network administration only.
