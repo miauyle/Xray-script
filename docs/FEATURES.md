@@ -46,6 +46,18 @@
   * 随机生成(格式: /8ugSUeNJ.9OEnTErb.dVZMUAFu)
   * 自定义输入(格式: /8ugSUeNJ, 加不加 `/` 都可以)
 
+## 流量统计的口径与准确性
+
+主菜单「8. 信息统计」调用 **Xray StatsService** 的一次快照，明确传入 `--reset=false`，只读、不会重置计数器。统计不会写入数据库；Xray 进程重启或其他程序显式重置计数器后，数值可变小。页面显示查询时间及可获得的 Xray PID / 启动时间，便于排查数值突降。
+
+- `Inbound`：以入站标签计数，包含 API 入口，可能包含未归属认证用户的握手、未完成连接或其他入口流量。
+- `Outbound`：以出站标签计数；`warp=0B` 表示本次累计窗口内没有记录到走 WARP 出站的 Xray 流量，不代表 WARP 隧道不通。直接在 VPS 上运行 `curl --proxy ...` 也不会通过 Xray 的 `warp` 出站计数。
+- `User`：以 Xray 客户端配置的用户 email/身份计数；与 Outbound 统计可能接近但并不保证逐字节相等。
+- **这三组是同一业务流量的不同维度，不能相加，也不是云服务商网卡/计费的真实字节数**（后者还可能包含 TCP/IP/TLS 等协议和容器、控制面流量）。
+- 默认使用 IEC 格式显示近似数值（KiB/MiB/GiB）；需要验证精确整数时，可直接执行 `bash <仓库目录>/tool/traffic.sh --raw`。该脚本使用 JSON 解析与整数求和，API 查询失败会明确报错，不会伪装成 `0B`。
+
+如果短时间内统计从大数变为小数，请对比页面的 Xray PID/启动时间、`systemctl show xray -p MainPID -p ActiveEnterTimestamp`，排除 Xray 重启；也检查是否有其他采集器使用 `xray api statsquery -reset=true`。原有统计脚本没有在菜单 8 中主动重置计数器。
+
 ## 分享链接
 
 基于[VMessAEAD / VLESS 分享链接标准提案](https://github.com/XTLS/Xray-core/discussions/716)与[v2rayN](https://github.com/2dust/v2rayN)实现，如果其他客户端无法正常使用，请自行根据分享链接进行修改。

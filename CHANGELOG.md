@@ -4,6 +4,9 @@
 
 这里归档历史版本细节；主页只展示最近的重要变更。旧版本编号顺序按原记录保留，不代表严格的发布时间排序。
 
+33. v2026.10.23.1 修复「8. 信息统计」可靠性：默认明确 `xray api statsquery --reset=false`；不再以 awk 逐行猜 JSON 与删除 `link` 子串，改为 jq 结构化解析；用 Bash 整数求和以避免 awk 浮点数超过 2^53 时出现的精度损失；空值按 0 处理，API/JSON/计数异常明确报错；显示查询时间、可获得的 Xray PID/启动时间，区分 Inbound/Outbound/User 统计维度与云主机真实计费带宽，明确三者不可相加；新增 `--raw` 精确字节显示与回归测试。菜单查询只读，不会自动清零；查询值变小可能是 Xray 重启或其他统计客户端主动 reset，不据此认定脚本重置。
+
+
 32. v2026.10.22.8 修复新版 Cloudflare WARP Proxy 反复 `Connecting`/`FirewallRepairFailed` 的确定性权限问题：WARP 需重装 `fwmark` 策略路由时，缺失 Linux `CAP_NET_ADMIN` 会报 `Operation not permitted`。Docker 新建容器仅增加 `--cap-add=NET_ADMIN`（不用 `--privileged`），现有容器诊断显示缺失能力并标出 Doctor 故障；运维菜单新增第 14 项手动确认修复已有容器：只迁移识别为脚本默认配置的容器，保留已停用原容器及注册目录，使用相同镜像重新创建，若容器 IP 变化则事务式更新 Xray WARP 出站，出错尝试回滚。增加迁移/回滚测试。不自动重建、不切换 WireGuard。Cloudflare 上游网络故障仍需另查。
 
 
