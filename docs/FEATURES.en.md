@@ -46,6 +46,18 @@
   * Randomly generated (example: /8ugSUeNJ.9OEnTErb.dVZMUAFu)
   * Custom input (example: /8ugSUeNJ, with or without `/`)
 
+## Traffic statistics: accounting scope and reliability
+
+Main menu item 8 queries a **single Xray StatsService snapshot** with explicit `--reset=false`. Viewing is read-only. Counters are in memory; they can decrease after a Xray process restart or an external explicit stats reset. The viewer prints the snapshot time and available Xray PID/process start information.
+
+- `Inbound` groups counter values by inbound tag and includes the local API inbound; unauthenticated handshakes and other non-user-associated traffic can make it differ from User.
+- `Outbound` groups by egress tag. `warp=0B` means Xray recorded no routed traffic via its warp outbound in the current counter interval; a separate host `curl` through the WARP SOCKS endpoint does not increment this outbound.
+- `User` groups traffic by Xray client email; it may be close to Outbound but the two are not necessarily byte-for-byte identical.
+- **These are overlapping accounting dimensions, not additive, and not full NIC/provider billable traffic.**
+- Human-readable totals use IEC units (KiB/MiB/GiB) and round for display. Run `bash <repo>/tool/traffic.sh --raw` for exact integer bytes. Broken API responses now report an error rather than misleading zero totals.
+
+For unexplained drops, compare the displayed Xray PID/start time and `systemctl show xray -p MainPID -p ActiveEnterTimestamp`, then check whether other software uses `xray api statsquery -reset=true`.
+
 ## Share Links
 
 Implemented based on [VMessAEAD / VLESS share link proposal](https://github.com/XTLS/Xray-core/discussions/716) and [v2rayN](https://github.com/2dust/v2rayN). If other clients do not work, adjust based on the generated share link manually.
