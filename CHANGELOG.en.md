@@ -4,6 +4,9 @@
 
 Detailed historical release notes are archived here. Original numbering is retained and may not be strictly chronological.
 
+33. v2026.10.23.1 improves main-menu traffic statistics: query Xray StatsService with explicit `--reset=false`; replace line-oriented AWK JSON guessing and destructive `link` suffix stripping with structured jq parsing; sum integer byte counters in Bash to avoid awk float64 precision loss above 2^53; treat absent protobuf zero values as zero, report API/JSON failures instead of fake zero totals, and show snapshot time plus available Xray PID/start time. Document non-additive Inbound/Outbound/User views versus NIC billing, and add exact `--raw` output and regression tests. Reading stats remains non-destructive; drops suggest Xray restart or another explicit reset operation.
+
+
 32. v2026.10.22.8 fixes the WARP fwmark permissions failure: recent WARP clients reinstall Linux fwmark policy rules, which fail with `Operation not permitted`/`FirewallRepairFailed` without Docker `CAP_NET_ADMIN`. Newly created containers grant only `--cap-add=NET_ADMIN`, not `--privileged`. Diagnostics explicitly report missing capability. Operations item 14 requires explicit confirmation to recreate eligible legacy script-managed containers with the same image and persisted registration mount, keeping the old stopped container as a backup and transactionally updating Xray's WARP IP if needed. Failed migration attempts to roll back. Tests cover opt-in and restoration; this does not fix unrelated MASQUE network failures.
 
 
