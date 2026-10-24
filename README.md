@@ -40,7 +40,7 @@ bash "$HOME/Xray-script.sh" --fallback # Vision + XHTTP
 ## 订阅使用要点
 
 - **单台 VPS**：主菜单 `10. Clash/Mihomo 配置与订阅` → 生成 YAML → 按需发布远程订阅。
-- **多台 VPS**：各服务器本地生成 Provider，中心手动 SFTP 拉取并统一 HTTPS 发布。
+- **多台 VPS**：各服务器本地生成 Provider，由中心手动 SSH/SFTP 拉取并统一 HTTPS 发布静态多节点订阅。
 - **安全提醒**：订阅链接中的 Token 相当于访问凭据；若使用 HTTP 发布订阅，内容不加密。
 - **协议兼容**：新版本 Xray REALITY 可能要求 Mihomo 开启 `X25519MLKEM768`。脚本按服务器版本生成配置；Shadowrocket 的兼容性必须以实际客户端测试为准。
 
