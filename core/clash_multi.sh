@@ -290,3 +290,55 @@ multi_ssh_test() {
     printf 'Peer label to test: ' >&2; read -r name
     python3 "${SSH_HELPER}" --config "${SSH_CONFIG_PATH}" --cache-dir "${SSH_CACHE_DIR}" test "$name"
 }
+
+# HTTPS publisher is independent of legacy standalone HTTP/Nginx publication.
+multi_https_url() {
+    local token="$1" filename="$2" domain port state="${CLASH_DIR}/https-center.json"
+    [[ -s "$state" ]] || return 1
+    domain="$(jq -r '.domain // empty' "$state")"
+    port="$(jq -r '.port // empty' "$state")"
+    [[ -n "$domain" && -n "$port" && -n "$token" ]] || return 1
+    if [[ "$port" == 443 ]]; then
+        printf 'https://%s/sub/%s/%s' "$domain" "$token" "$filename"
+    else
+        printf 'https://%s:%s/sub/%s/%s' "$domain" "$port" "$token" "$filename"
+    fi
+}
+multi_https_run() {
+    python3 "${CUR_DIR}/clash_https.py" --base "${CLASH_DIR}" \
+        --server-script "${CLASH_HTTP_SERVER_PATH}" \
+        --token "${MULTI_TOKEN_PATH}" --multi "${MULTI_YAML_PATH}" \
+        --shadowrocket "${SHADOWROCKET_NODES_PATH}" --single "${CLASH_CONFIG_PATH}" "$@"
+}
+multi_https_menu() {
+    local select domain port
+    echo '----- 中心 HTTPS / ACME (无自动 SSH 同步) -----'
+    echo '1. DNS-01 (Dynu TXT) 申请/切换验证方式'
+    echo '2. HTTP-01 (公网 TCP 80) 申请/切换验证方式'
+    echo '3. 查看证书、HTTPS 服务与续期计划'
+    echo '4. 手动强制续期'
+    echo '5. 启动/更新 HTTPS 发布（默认为 8443）'
+    echo '6. 检查 SSH 监听与主机防火墙（只读）'
+    echo '0. 返回'
+    read -rp '选择: ' select
+    case "$select" in
+        1|2)
+            read -rp 'Dynu 完整域名: ' domain
+            if [[ "$select" == 1 ]]; then
+                multi_https_run issue --method dns --domain "$domain"
+            else
+                multi_https_run issue --method http --domain "$domain"
+            fi ;;
+        3) multi_https_run status ;;
+        4) multi_https_run renew ;;
+        5)
+            read -rp 'HTTPS 端口 [8443]: ' port
+            multi_https_run --port "${port:-8443}" start && multi_show ;;
+        6) multi_https_run audit ;;
+        0) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+multi_ssh_audit() {
+    multi_https_run audit
+}
