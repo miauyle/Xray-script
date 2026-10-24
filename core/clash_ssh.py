@@ -238,11 +238,30 @@ def publish(config, single, local, directory, multi, shadowrocket, updates=None)
         cached.append((peer["name"], nodes))
     yaml_text, text64 = merge(single.read_text(encoding="utf-8"),
                               local.read_text(encoding="utf-8"), cached)
-    # Validate all outputs *before* replacing any publication or cache.
-    for name, content in updates.items():
-        atomic_text(cache_file(directory, name), content)
-    atomic_text(multi, yaml_text)
-    atomic_bytes(shadowrocket, text64)
+    # Validate all outputs before making changes. Each file is atomically
+    # replaced; if any replacement fails, restore the previous valid snapshot.
+    writes = [(multi, yaml_text.encode("utf-8")), (shadowrocket, text64)]
+    writes.extend((cache_file(directory, name), raw.encode("utf-8"))
+                  for name, raw in updates.items())
+    previous = {path: path.read_bytes() if path.exists() else None
+                for path, _ in writes}
+    changed = []
+    try:
+        for path, raw in writes:
+            atomic_bytes(path, raw)
+            changed.append(path)
+    except OSError:
+        for path in reversed(changed):
+            old = previous[path]
+            try:
+                if old is None:
+                    path.unlink(missing_ok=True)
+                else:
+                    atomic_bytes(path, old)
+            except OSError:
+                # Do not suppress the error; operator must inspect the files.
+                pass
+        raise
     return sum(len(n) for _, n in cached)
 
 
