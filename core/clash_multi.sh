@@ -268,7 +268,18 @@ multi_disable() {
         info "SSH center disabled. Existing standalone Xray and tokens retained."
         return 0
     fi
-    info "No SSH center enabled. Legacy center configuration was not modified."
+    # Backward compatibility for existing HTTP Provider centers: do not
+    # strand their historical disable action during an ordinary upgrade.
+    if [[ -s "${MULTI_CONFIG_PATH}" ]] &&
+       jq -e '.enabled == true' "${MULTI_CONFIG_PATH}" >/dev/null 2>&1; then
+        python3 "${MULTI_HELPER}" --config "${MULTI_CONFIG_PATH}" disable ||
+            fail "Cannot disable legacy center."
+        multi_refresh_publication || fail "Legacy center publication cleanup failed."
+        rm -f "${MULTI_YAML_PATH}" "${SHADOWROCKET_NODES_PATH}"
+        info "Legacy center disabled; standalone subscription retained."
+    else
+        info "No center enabled."
+    fi
 }
 
 # Manual-only remote refresh, failures keep last valid cache and static publication.
