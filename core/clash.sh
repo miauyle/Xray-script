@@ -428,6 +428,10 @@ EOF_YAML
     chmod 600 "${CLASH_CONFIG_PATH}"
     # Standalone node publication does not depend on a center.
     single_generate_provider || fail "Could not create standalone Provider"
+    if [[ -s "${CLASH_DIR}/ssh-export.json" ]]; then
+        python3 "${CUR_DIR}/clash_export.py" --config "${CLASH_DIR}/ssh-export.json" \
+            --source "${PROVIDER_YAML_PATH}" publish || fail "SFTP export failed: old copy retained."
+    fi
     if multi_is_enabled; then
         multi_generate_files || fail "Could not regenerate multi-server subscriptions"
     fi
@@ -440,7 +444,7 @@ function current_token() {
 
 function generate_token_value() {
     local raw token
-    raw="$(openssl rand -base64 16 2>/dev/null)" || fail "$(msg token_failed)"
+    raw="$(openssl rand -base64 32 2>/dev/null)" || fail "$(msg token_failed)"
     token="$(printf '%s' "${raw}" | tr '+/' '-_' | tr -d '=[:space:]')"
     [[ -n "${token}" ]] || fail "$(msg token_failed)"
     printf '%s' "${token}"
@@ -1036,6 +1040,12 @@ function main() {
     multi-list) multi_list ;;
     multi-disable) multi_disable ;;
     multi-rotate) multi_rotate "${2:-}" ;;
+    multi-sync) multi_sync "${2:-}" ;;
+    multi-test) multi_ssh_test ;;
+    multi-https) multi_https_menu ;;
+    multi-audit) multi_ssh_audit ;;
+    private) private_local_subscription ;;
+    export-setup) configure_sftp_export ;;
     rotate) rotate_remote ;;
     disable) disable_remote ;;
     show) show_info ;;
@@ -1043,6 +1053,32 @@ function main() {
     esac
 }
 
+configure_sftp_export() {
+    local username
+    [[ -s "${PROVIDER_YAML_PATH}" ]] || generate_yaml
+    printf 'Dedicated existing sync account (private primary group): ' >&2
+    read -r username
+    python3 "${CUR_DIR}/clash_export.py" --config "${CLASH_DIR}/ssh-export.json" \
+        --source "${PROVIDER_YAML_PATH}" configure "$username" ||
+        fail "Could not configure protected SFTP export."
+    info "Re-generating the local provider will now refresh the protected copy."
+}
+# Privacy migration: stop only the script-managed public subscription backend.
+# Keep the old Token and locally generated Provider for future independent use.
+private_local_subscription() {
+    multi_is_enabled && fail "Do not privatize the center publisher; this is for leaf nodes."
+    local backend
+    backend="$(state_value backend 2>/dev/null || true)"
+    case "$backend" in
+        http) disable_http_subscription ;;
+        nginx) disable_nginx_subscription || fail "Nginx cleanup failed; previous publisher preserved." ;;
+        local) info "Already local-only."; return 0 ;;
+        *) info "No publicly managed subscription active."; return 0 ;;
+    esac
+    save_state local '' 0
+    info "Subscription publisher disabled, Token and proxies.yaml retained."
+    warn "Host and Oracle Cloud ingress rules have NOT been changed; check exposed ports manually."
+}
 source "${CUR_DIR}/clash_multi.sh"
 source "${CUR_DIR}/host_tuning.sh"
 

@@ -10,13 +10,21 @@ readonly MULTI_TOKEN_PATH="${CLASH_DIR}/multi_subscription.token"
 readonly PROVIDER_TOKEN_PATH="${CLASH_DIR}/provider.token"
 readonly PROVIDER_NEXT_TOKEN_PATH="${CLASH_DIR}/provider.token.next"
 readonly MULTI_HELPER="${CUR_DIR}/clash_multi.py"
+readonly SSH_CONFIG_PATH="${CLASH_DIR}/ssh-peers.json"
+readonly SSH_CACHE_DIR="${CLASH_DIR}/ssh-cache"
+readonly SSH_HELPER="${CUR_DIR}/clash_ssh.py"
 readonly SHADOWROCKET_HELPER="${CUR_DIR}/clash_shadowrocket.py"
 readonly SHADOWROCKET_NODES_PATH="${CLASH_DIR}/multi_nodes.txt"
 readonly SHADOWROCKET_CACHE_DIR="${CLASH_DIR}/provider-cache"
 readonly SHADOWROCKET_REFRESH_SERVICE="/etc/systemd/system/xray-shadowrocket-refresh.service"
 readonly SHADOWROCKET_REFRESH_TIMER="/etc/systemd/system/xray-shadowrocket-refresh.timer"
 
+multi_ssh_enabled() {
+    [[ -s "${SSH_CONFIG_PATH}" ]] && jq -e '.enabled == true' "${SSH_CONFIG_PATH}" >/dev/null 2>&1
+}
+
 multi_is_enabled() {
+    multi_ssh_enabled && return 0
     [[ -s "${MULTI_CONFIG_PATH}" ]] &&
         jq -e '.enabled == true' "${MULTI_CONFIG_PATH}" >/dev/null 2>&1
 }
@@ -27,8 +35,7 @@ multi_read_token() {
 
 multi_generate_token() {
     local token
-    token="$(openssl rand -base64 32 2>/dev/null | tr '+/' '-_' | tr -d '=[:space:]')" || return 1
-    [[ -n "$token" ]] || return 1
+    token="$(generate_token_value)" || return 1
     printf '%s\n' "$token" >"$1" || return 1
     chmod 600 "$1"
 }
@@ -43,6 +50,12 @@ single_generate_provider() {
 # Only the center generates aggregate client subscriptions.
 multi_generate_files() {
     multi_is_enabled || return 0
+    if multi_ssh_enabled; then
+        python3 "${SSH_HELPER}" --config "${SSH_CONFIG_PATH}" --single "${CLASH_CONFIG_PATH}" \
+            --local "${PROVIDER_YAML_PATH}" --cache-dir "${SSH_CACHE_DIR}" \
+            --multi "${MULTI_YAML_PATH}" --shadowrocket "${SHADOWROCKET_NODES_PATH}" render
+        return $?
+    fi
     python3 "${MULTI_HELPER}" --config "${MULTI_CONFIG_PATH}" generate \
         --single "${CLASH_CONFIG_PATH}" --provider "${PROVIDER_YAML_PATH}" \
         --multi "${MULTI_YAML_PATH}" || return 1
@@ -94,6 +107,9 @@ EOF_TIMER
 }
 
 multi_refresh_publication() {
+    # Static SSH center subscriptions are served by the independent HTTPS unit.
+    # No periodic fetching, no restart of the old single-server publisher.
+    multi_ssh_enabled && return 0
     local backend port
     backend="$(state_value backend 2>/dev/null || true)"
     [[ -n "$backend" ]] || return 1
@@ -116,48 +132,46 @@ multi_refresh_publication() {
 }
 
 multi_enable() {
-    [[ -n "$(state_value backend 2>/dev/null || true)" ]] ||
-        fail "First enable this VPS's standalone remote subscription."
     command -v python3 >/dev/null 2>&1 || fail "Python 3 required."
     mkdir -p "${CLASH_DIR}" && chmod 700 "${CLASH_DIR}"
-    python3 "${MULTI_HELPER}" --config "${MULTI_CONFIG_PATH}" enable ||
-        fail "Could not enable center configuration"
-    generate_yaml
+    python3 "${SSH_HELPER}" --config "${SSH_CONFIG_PATH}" enable ||
+        fail "Could not enable SSH aggregation."
+    [[ -s "${CLASH_CONFIG_PATH}" && -s "${PROVIDER_YAML_PATH}" ]] || generate_yaml
+    multi_generate_files || fail "Center static publication failed."
     [[ -s "${MULTI_TOKEN_PATH}" ]] ||
-        multi_generate_token "${MULTI_TOKEN_PATH}" || fail "Center token creation failed"
-    multi_refresh_publication || fail "Could not publish center subscriptions."
-    info "This VPS is the aggregation center. Other VPSs only need their standalone subscriptions."
+        multi_generate_token "${MULTI_TOKEN_PATH}" || fail "Center token creation failed."
+    shadowrocket_stop_refresh_timer
+    info "SSH aggregation enabled; no provider HTTP polling or background SSH synchronization."
+    info "Existing legacy public subscriptions are unchanged until explicitly retired."
     multi_show
 }
 
 multi_add() {
-    multi_is_enabled || fail "Only the center can manage remote VPS subscriptions. Enable the center here first."
-    local name="${1:-}" url="${2:-}"
-    if [[ -z "$name" ]]; then
-        printf 'VPS label (e.g. Tokyo): ' >&2
-        read -r name
-    fi
-    if [[ -z "$url" ]]; then
-        printf 'Remote VPS single Provider URL (/sub/TOKEN/proxies.yaml): ' >&2
-        read -r url
-    fi
-    python3 "${MULTI_HELPER}" --config "${MULTI_CONFIG_PATH}" add "$name" "$url" ||
-        fail "Could not add VPS."
-    generate_yaml
-    info "Added VPS to THIS center only. No changes required on the remote VPS."
+    multi_ssh_enabled || fail "Enable SSH aggregation on the center first."
+    local name host port user remote key known
+    printf 'Node label (e.g. Tokyo): ' >&2; read -r name
+    printf 'SSH host/IP: ' >&2; read -r host
+    printf 'SSH username (prefer read-only sync account): ' >&2; read -r user
+    printf 'SSH port [22]: ' >&2; read -r port
+    port="${port:-22}"
+    printf 'Remote proxies.yaml absolute path [/root/.xray-script/clash/proxies.yaml]: ' >&2; read -r remote
+    remote="${remote:-/root/.xray-script/clash/proxies.yaml}"
+    printf 'Center private SSH key absolute path: ' >&2; read -r key
+    printf 'Pinned known_hosts file absolute path: ' >&2; read -r known
+    python3 "${SSH_HELPER}" --config "${SSH_CONFIG_PATH}" add \
+        "$name" "$host" "$user" "$remote" "$key" "$known" --port "$port" ||
+        fail "Could not save node; verify key/known_hosts permissions."
+    info "Saved. Run Test SSH and Sync to import the peer. Existing subscriptions retained."
 }
 
 multi_remove() {
-    multi_is_enabled || fail "Center subscriptions are not enabled on this VPS."
-    local name="${1:-}"
-    if [[ -z "$name" ]]; then
-        printf 'VPS label to remove: ' >&2
-        read -r name
-    fi
-    python3 "${MULTI_HELPER}" --config "${MULTI_CONFIG_PATH}" remove "$name" ||
-        fail "VPS not found."
-    generate_yaml
-    info "Removed VPS from center; its own standalone subscription is untouched."
+    multi_ssh_enabled || fail "SSH center not enabled."
+    local name
+    printf 'Node label to delete: ' >&2; read -r name
+    python3 "${SSH_HELPER}" --config "${SSH_CONFIG_PATH}" remove "$name" ||
+        fail "Node does not exist."
+    multi_generate_files || fail "Could not regenerate after removal."
+    info "Removed from aggregate. Remote Xray untouched."
 }
 
 multi_url() {
@@ -180,38 +194,50 @@ multi_url() {
 
 # Display configured remote Provider addresses only on explicit operator request.
 multi_list() {
-    multi_is_enabled || fail "This VPS is not the aggregation center."
-    warn "Provider URLs contain access credentials; keep this output private."
-    python3 "${MULTI_HELPER}" --config "${MULTI_CONFIG_PATH}" list
+    if multi_ssh_enabled; then
+        python3 "${SSH_HELPER}" --config "${SSH_CONFIG_PATH}" --cache-dir "${SSH_CACHE_DIR}" list
+    else
+        python3 "${MULTI_HELPER}" --config "${MULTI_CONFIG_PATH}" list
+    fi
 }
 
 multi_doctor() {
-    multi_is_enabled || fail "Center not enabled here; this VPS is a standalone node."
-    python3 "${SHADOWROCKET_HELPER}" \
-        --config "${MULTI_CONFIG_PATH}" --local "${PROVIDER_YAML_PATH}" \
-        --cache-dir "${SHADOWROCKET_CACHE_DIR}" \
-        --single "${CLASH_CONFIG_PATH}" \
-        --xray "${XRAY_CONFIG_PATH}" --script "${SCRIPT_CONFIG_PATH}" --diagnose
+    if multi_ssh_enabled; then
+        python3 "${SSH_HELPER}" --config "${SSH_CONFIG_PATH}" --cache-dir "${SSH_CACHE_DIR}" list
+        [[ -s "${MULTI_YAML_PATH}" && -s "${SHADOWROCKET_NODES_PATH}" ]] ||
+            fail "Static center subscriptions not generated."
+        info "Check HTTPS via the certificate/service menu; run manual sync to refresh peers."
+    else
+        python3 "${SHADOWROCKET_HELPER}" \
+            --config "${MULTI_CONFIG_PATH}" --local "${PROVIDER_YAML_PATH}" \
+            --cache-dir "${SHADOWROCKET_CACHE_DIR}" \
+            --single "${CLASH_CONFIG_PATH}" \
+            --xray "${XRAY_CONFIG_PATH}" --script "${SCRIPT_CONFIG_PATH}" --diagnose
+    fi
 }
 
 multi_show() {
     local token
+    if multi_ssh_enabled; then
+        info "Static SSH center enabled (no automatic peer polling)."
+        python3 "${SSH_HELPER}" --config "${SSH_CONFIG_PATH}" --cache-dir "${SSH_CACHE_DIR}" list || return 1
+        token="$(multi_read_token "${MULTI_TOKEN_PATH}")"
+        if [[ -n "$token" ]] && systemctl -q is-active xray-center-https 2>/dev/null; then
+            printf 'Center Mihomo: %s\n' "$(multi_https_url "$token" multi_clash.yaml)"
+            printf 'Center Shadowrocket: %s\n' "$(multi_https_url "$token" multi_nodes.txt)"
+        else
+            warn "HTTPS publication not active. Configure certificate and HTTPS before sharing URLs."
+        fi
+        return 0
+    fi
     if ! multi_is_enabled; then
         info "Standalone VPS (not aggregation center)."
-        token="$(current_token)"
-        [[ -n "$token" ]] &&
-            printf 'Standalone Provider URL: %s\n' "$(multi_url "$token" proxies.yaml)"
         return 0
     fi
     python3 "${MULTI_HELPER}" --config "${MULTI_CONFIG_PATH}" show || return 1
     token="$(multi_read_token "${MULTI_TOKEN_PATH}")"
     [[ -n "$token" ]] && printf 'Center Mihomo subscription: %s\n' "$(multi_url "$token" multi_clash.yaml)"
     [[ -n "$token" ]] && printf 'Center Shadowrocket subscription: %s\n' "$(multi_url "$token" multi_nodes.txt)"
-    token="$(current_token)"
-    [[ -n "$token" ]] && printf 'This VPS standalone Provider: %s\n' "$(multi_url "$token" proxies.yaml)"
-    if [[ "$(state_value backend 2>/dev/null)" == http ]]; then
-        warn "Plain HTTP exposes subscription credentials."
-    fi
 }
 
 # Rotate the aggregation CENTER token only. Leaf providers use the usual
@@ -235,16 +261,98 @@ multi_rotate() {
 }
 
 multi_disable() {
-    multi_is_enabled || { info "No center is enabled on this VPS."; return 0; }
-    python3 "${MULTI_HELPER}" --config "${MULTI_CONFIG_PATH}" disable ||
-        fail "Could not disable center."
-    if ! multi_refresh_publication; then
-        python3 "${MULTI_HELPER}" --config "${MULTI_CONFIG_PATH}" enable >/dev/null || true
-        fail "Center publication update failed; center configuration was restored."
+    if multi_ssh_enabled; then
+        python3 "${SSH_HELPER}" --config "${SSH_CONFIG_PATH}" disable ||
+            fail "Unable to disable center."
+        systemctl disable --now xray-center-https 2>/dev/null || true
+        info "SSH center disabled. Existing standalone Xray and tokens retained."
+        return 0
     fi
-    rm -f "${MULTI_TOKEN_PATH}" "${MULTI_YAML_PATH}" "${SHADOWROCKET_NODES_PATH}"
-    # The standalone subscription and proxies.yaml are deliberately retained.
-    # Previous dedicated Provider tokens are also left intact during migration
-    # so other centers do not unexpectedly lose access.
-    info "Center disabled; standalone subscriptions remain available."
+    # Backward compatibility for existing HTTP Provider centers: do not
+    # strand their historical disable action during an ordinary upgrade.
+    if [[ -s "${MULTI_CONFIG_PATH}" ]] &&
+       jq -e '.enabled == true' "${MULTI_CONFIG_PATH}" >/dev/null 2>&1; then
+        python3 "${MULTI_HELPER}" --config "${MULTI_CONFIG_PATH}" disable ||
+            fail "Cannot disable legacy center."
+        multi_refresh_publication || fail "Legacy center publication cleanup failed."
+        rm -f "${MULTI_YAML_PATH}" "${SHADOWROCKET_NODES_PATH}"
+        info "Legacy center disabled; standalone subscription retained."
+    else
+        info "No center enabled."
+    fi
+}
+
+# Manual-only remote refresh, failures keep last valid cache and static publication.
+multi_sync() {
+    multi_ssh_enabled || fail "Enable SSH center first."
+    local name="${1:-}"
+    if [[ -z "$name" ]]; then
+        printf 'Peer label or all [all]: ' >&2; read -r name
+    fi
+    name="${name:-all}"
+    if ! python3 "${SSH_HELPER}" --config "${SSH_CONFIG_PATH}" --single "${CLASH_CONFIG_PATH}" \
+        --local "${PROVIDER_YAML_PATH}" --cache-dir "${SSH_CACHE_DIR}" \
+        --multi "${MULTI_YAML_PATH}" --shadowrocket "${SHADOWROCKET_NODES_PATH}" \
+        sync "$name"; then
+        warn "One or more sync operations failed; existing snapshots retained."
+        return 1
+    fi
+}
+multi_ssh_test() {
+    multi_ssh_enabled || fail "Enable SSH center first."
+    local name
+    printf 'Peer label to test: ' >&2; read -r name
+    python3 "${SSH_HELPER}" --config "${SSH_CONFIG_PATH}" --cache-dir "${SSH_CACHE_DIR}" test "$name"
+}
+
+# HTTPS publisher is independent of legacy standalone HTTP/Nginx publication.
+multi_https_url() {
+    local token="$1" filename="$2" domain port state="${CLASH_DIR}/https-center.json"
+    [[ -s "$state" ]] || return 1
+    domain="$(jq -r '.domain // empty' "$state")"
+    port="$(jq -r '.port // empty' "$state")"
+    [[ -n "$domain" && -n "$port" && -n "$token" ]] || return 1
+    if [[ "$port" == 443 ]]; then
+        printf 'https://%s/sub/%s/%s' "$domain" "$token" "$filename"
+    else
+        printf 'https://%s:%s/sub/%s/%s' "$domain" "$port" "$token" "$filename"
+    fi
+}
+multi_https_run() {
+    python3 "${CUR_DIR}/clash_https.py" --base "${CLASH_DIR}" \
+        --server-script "${CLASH_HTTP_SERVER_PATH}" \
+        --token "${MULTI_TOKEN_PATH}" --multi "${MULTI_YAML_PATH}" \
+        --shadowrocket "${SHADOWROCKET_NODES_PATH}" --single "${CLASH_CONFIG_PATH}" "$@"
+}
+multi_https_menu() {
+    local select domain port
+    echo '----- 中心 HTTPS / ACME (无自动 SSH 同步) -----'
+    echo '1. DNS-01 (Dynu TXT) 申请/切换验证方式'
+    echo '2. HTTP-01 (公网 TCP 80) 申请/切换验证方式'
+    echo '3. 查看证书、HTTPS 服务与续期计划'
+    echo '4. 手动强制续期'
+    echo '5. 启动/更新 HTTPS 发布（默认为 8443）'
+    echo '6. 检查 SSH 监听与主机防火墙（只读）'
+    echo '0. 返回'
+    read -rp '选择: ' select
+    case "$select" in
+        1|2)
+            read -rp 'Dynu 完整域名: ' domain
+            if [[ "$select" == 1 ]]; then
+                multi_https_run issue --method dns --domain "$domain"
+            else
+                multi_https_run issue --method http --domain "$domain"
+            fi ;;
+        3) multi_https_run status ;;
+        4) multi_https_run renew ;;
+        5)
+            read -rp 'HTTPS 端口 [8443]: ' port
+            multi_https_run --port "${port:-8443}" start && multi_show ;;
+        6) multi_https_run audit ;;
+        0) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+multi_ssh_audit() {
+    multi_https_run audit
 }

@@ -178,7 +178,9 @@
       "info3": "Show the local YAML path and current remote subscription URL",
       "info4": "Generate a new random token so the old subscription URL stops working",
       "info5": "Disable local subscription; center URLs, if enabled, remain published",
-      "option6": "Central aggregator (NOT needed on standalone VPSs)"
+      "option6": "Central aggregator (NOT needed on standalone VPSs)",
+      "option7": "Leaf: stop old public subscription (keep local token)",
+      "option8": "Leaf: configure auto-updated read-only SFTP export"
     },
     "operations": {
       "title": "Operations & Diagnostics",
@@ -201,15 +203,20 @@
       "title": "Direct egress IP family"
     },
     "clash_multi": {
-      "title": "Central aggregation (enable on ONE VPS only)",
-      "option1": "Enable or refresh center subscriptions",
-      "option2": "Add/update a standalone VPS Provider URL",
-      "option3": "Remove VPS from center",
-      "option4": "Show center subscriptions and standalone Provider",
+      "title": "Central aggregate (manual SSH pull)",
+      "option1": "Enable SSH center (preserve legacy config)",
+      "option2": "Add/update peer SSH settings and port",
+      "option3": "Remove peer",
+      "option4": "Show subscriptions and sync state",
       "option5": "Rotate center subscription token",
-      "option6": "Disable center (keep local standalone subscription)",
-      "option7": "Diagnose remote Providers and center configuration",
-      "option8": "List remote VPS names and full Provider URLs (includes tokens)"
+      "option6": "Disable SSH center (keep Xray)",
+      "option7": "Diagnose local static subscription",
+      "option8": "List peers and last successful sync",
+      "option9": "Sync all peers now",
+      "option10": "Sync a selected peer now",
+      "option11": "Test peer SSH/SFTP",
+      "option12": "HTTPS certificate: Dynu TXT or HTTP-01 and renewal",
+      "option13": "Read-only SSH/firewall security audit"
     },
     "bbr": {
       "title": "TCP BBR network tuning",

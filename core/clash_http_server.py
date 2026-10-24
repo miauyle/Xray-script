@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import pathlib
+import ssl
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from clash_shadowrocket import aggregate
 
@@ -26,7 +27,9 @@ class Handler(BaseHTTPRequestHandler):
             (self.server.provider_next_token_file, self.server.provider_yaml_file, "proxies.yaml"),
         ]
         # Both multi endpoints use the same scoped MULTI_TOKEN.
-        if (getattr(self.server, "shadowrocket_config_file", None) is not None and
+        if getattr(self.server, "shadowrocket_static_file", None) is not None:
+            routes.append((self.server.multi_token_file, self.server.shadowrocket_static_file, "multi_nodes.txt"))
+        elif (getattr(self.server, "shadowrocket_config_file", None) is not None and
                 getattr(self.server, "shadowrocket_cache_dir", None) is not None):
             routes.append((self.server.multi_token_file, self.server.provider_yaml_file, "multi_nodes.txt"))
         selected_file = None
@@ -37,7 +40,7 @@ class Handler(BaseHTTPRequestHandler):
             token = read_token(token_file)
             if token and request_path == f"/sub/{token}/{filename}":
                 selected_file = yaml_file
-                dynamic = filename == "multi_nodes.txt"
+                dynamic = filename == "multi_nodes.txt" and getattr(self.server, "shadowrocket_static_file", None) is None
                 break
         if selected_file is None:
             self.send_error(404)
@@ -60,7 +63,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
 
         self.send_response(200)
-        self.send_header("Content-Type", "text/plain; charset=utf-8" if dynamic else "text/yaml; charset=utf-8")
+        self.send_header("Content-Type", "text/plain; charset=utf-8" if filename == "multi_nodes.txt" else "text/yaml; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
@@ -82,6 +85,9 @@ def main():
     parser.add_argument("--provider-token-file", type=pathlib.Path)
     parser.add_argument("--provider-yaml-file", type=pathlib.Path)
     parser.add_argument("--provider-next-token-file", type=pathlib.Path)
+    parser.add_argument("--shadowrocket-static-file", type=pathlib.Path)
+    parser.add_argument("--tls-cert", type=pathlib.Path)
+    parser.add_argument("--tls-key", type=pathlib.Path)
     parser.add_argument("--shadowrocket-config-file", type=pathlib.Path)
     parser.add_argument("--shadowrocket-cache-dir", type=pathlib.Path)
     args = parser.parse_args()
@@ -94,8 +100,16 @@ def main():
     server.provider_token_file = args.provider_token_file
     server.provider_next_token_file = args.provider_next_token_file
     server.provider_yaml_file = args.provider_yaml_file
+    server.shadowrocket_static_file = args.shadowrocket_static_file
     server.shadowrocket_config_file = args.shadowrocket_config_file
     server.shadowrocket_cache_dir = args.shadowrocket_cache_dir
+    if bool(args.tls_cert) != bool(args.tls_key):
+        parser.error("TLS requires both --tls-cert and --tls-key")
+    if args.tls_cert:
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
+        context.load_cert_chain(str(args.tls_cert), str(args.tls_key))
+        server.socket = context.wrap_socket(server.socket, server_side=True)
     server.serve_forever()
 
 

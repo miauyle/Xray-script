@@ -1,3 +1,10 @@
+## v2026.10.24.1
+
+- Opt-in manual strict-host-key SFTP center pulls with validated static Mihomo/Shadowrocket, fail-safe snapshots; optional private per-leaf export.
+- Dynu DNS-01 or HTTP-01 via existing acme.sh, isolated HTTPS service and daily renewal. No Xray port/firewall changes.
+- New standalone and center tokens use independent 32-byte cryptographic randomness; existing token files remain untouched.
+- Offline regression tests; VPS, DNS API, Oracle ingress and client handshake verification still required.
+
 # Changelog
 
 [Home](.github/README.en.md) · [中文](CHANGELOG.md)
