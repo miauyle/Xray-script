@@ -1,3 +1,11 @@
+## v2026.10.24.1
+
+- 多 VPS 订阅：中心手动、严格 Host Key SFTP 拉取子节点 Provider；静态聚合 Mihomo/Shadowrocket（保留规则、回退缓存），不再要求新子节点提供公网 HTTP Provider。
+- 子节点可配置低权限只读 SFTP 导出；生成本地订阅后自动原子更新供中心读取的副本；旧 HTTP 订阅需验证迁移后人工关闭。
+- Dynu DNS-01/HTTP-01 双选项、独立中心 HTTPS 与证书目录、systemd 自动续期；不抢占 Xray 443，不修改云防火墙。
+- 单节点/中心新 Token 同为 32 字节随机数（URL-safe 43 字符），旧 Token 升级时保持不变。
+- 离线测试与使用文档；VPS HTTPS、DNS API、Oracle NSG、客户端连通性仍需实机验证。
+
 # 更新日志 / Changelog
 
 [返回主页](README.md) · [English](CHANGELOG.en.md)
