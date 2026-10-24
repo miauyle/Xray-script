@@ -428,6 +428,10 @@ EOF_YAML
     chmod 600 "${CLASH_CONFIG_PATH}"
     # Standalone node publication does not depend on a center.
     single_generate_provider || fail "Could not create standalone Provider"
+    if [[ -s "${CLASH_DIR}/ssh-export.json" ]]; then
+        python3 "${CUR_DIR}/clash_export.py" --config "${CLASH_DIR}/ssh-export.json" \
+            --source "${PROVIDER_YAML_PATH}" publish || fail "SFTP export failed: old copy retained."
+    fi
     if multi_is_enabled; then
         multi_generate_files || fail "Could not regenerate multi-server subscriptions"
     fi
@@ -1041,6 +1045,7 @@ function main() {
     multi-https) multi_https_menu ;;
     multi-audit) multi_ssh_audit ;;
     private) private_local_subscription ;;
+    export-setup) configure_sftp_export ;;
     rotate) rotate_remote ;;
     disable) disable_remote ;;
     show) show_info ;;
@@ -1048,6 +1053,16 @@ function main() {
     esac
 }
 
+configure_sftp_export() {
+    local username
+    [[ -s "${PROVIDER_YAML_PATH}" ]] || generate_yaml
+    printf 'Dedicated existing sync account (private primary group): ' >&2
+    read -r username
+    python3 "${CUR_DIR}/clash_export.py" --config "${CLASH_DIR}/ssh-export.json" \
+        --source "${PROVIDER_YAML_PATH}" configure "$username" ||
+        fail "Could not configure protected SFTP export."
+    info "Re-generating the local provider will now refresh the protected copy."
+}
 # Privacy migration: stop only the script-managed public subscription backend.
 # Keep the old Token and locally generated Provider for future independent use.
 private_local_subscription() {
