@@ -178,7 +178,8 @@
       "info3": "显示本地 YAML 路径和当前远程订阅 URL",
       "info4": "生成新的随机 Token，旧订阅 URL 立即失效",
       "info5": "关闭本机单机订阅；若本机仍是中心，中心订阅仍可使用",
-      "option6": "中心聚合订阅管理（普通 VPS 无需开启）"
+      "option6": "中心聚合订阅管理（普通 VPS 无需开启）",
+      "option7": "子节点：停用旧公网订阅（保留本地 Token）"
     },
     "operations": {
       "title": "运维与诊断",
@@ -201,15 +202,20 @@
       "title": "Direct 出口 IP family"
     },
     "clash_multi": {
-      "title": "中心聚合订阅（仅在中心 VPS 启用）",
-      "option1": "将本机设为中心／刷新中心订阅",
-      "option2": "添加或更新普通 VPS 的独立 Provider URL",
-      "option3": "从中心移除 VPS",
-      "option4": "查看中心聚合订阅与本机 Provider",
-      "option5": "更换中心聚合订阅 Token",
-      "option6": "关闭中心（保留本机独立订阅）",
-      "option7": "诊断中心与远端 Provider",
-      "option8": "查看已添加子节点名称及完整 Provider URL（含 Token）"
+      "title": "中心聚合订阅（手动 SSH 拉取）",
+      "option1": "启用中心 SSH 聚合（保留旧配置）",
+      "option2": "添加/更新子节点 SSH 信息及端口",
+      "option3": "移除子节点",
+      "option4": "查看中心订阅与同步状态",
+      "option5": "刷新中心订阅 Token",
+      "option6": "关闭 SSH 中心（不影响 Xray）",
+      "option7": "诊断本地静态订阅",
+      "option8": "查看子节点及最近成功同步时间",
+      "option9": "立即同步全部子节点",
+      "option10": "同步指定子节点",
+      "option11": "测试子节点 SSH/SFTP",
+      "option12": "HTTPS 证书、TXT/80 验证及续期",
+      "option13": "SSH / 防火墙安全只读检查"
     },
     "bbr": {
       "title": "TCP BBR 网络优化",
