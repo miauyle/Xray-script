@@ -179,7 +179,8 @@
       "info4": "Generate a new random token so the old subscription URL stops working",
       "info5": "Disable local subscription; center URLs, if enabled, remain published",
       "option6": "Central aggregator (NOT needed on standalone VPSs)",
-      "option7": "Leaf: stop old public subscription (keep local token)"
+      "option7": "Leaf: stop old public subscription (keep local token)",
+      "option8": "Leaf: configure auto-updated read-only SFTP export"
     },
     "operations": {
       "title": "Operations & Diagnostics",
