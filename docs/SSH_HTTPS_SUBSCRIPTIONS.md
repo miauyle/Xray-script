@@ -8,7 +8,7 @@
 
 正常以 root 运行时，节点文件位于 /root/.xray-script/clash/proxies.yaml。原配置文件不应成为 Web 根目录；不要把配置、UUID、密钥发往公网 HTTP Provider。
 
-推荐为中心 SFTP 读取设置专用低权限账户（如 xraysync），不要简单开放 root 的私有目录。可由管理员在每次生成后将 proxies.yaml 复制到仅该账户有权读取的 /home/xraysync/subscriptions/proxies.yaml，设置 root:xraysync / mode 0640，确保父目录可遍历。复制时保护临时文件与目标原子更新；同时保留在操作台显示的“子节点本地订阅生成”流程。中心 SSH 配置中的路径应填写这个只读副本。
+推荐为中心 SFTP 读取设置专用低权限账户（如 xraysync），不要简单开放 root 的私有目录。在子节点主菜单 10 → 8 输入已有的专用低权限账号（要求该账号有同名的独立主组），自动创建 root 拥有的 /var/lib/xray-script-sftp/账号/proxies.yaml，只授予对应私有组只读权限。以后重新生成本机订阅时会自动、原子地更新这份副本；它不启动 HTTP，不包含 REALITY 私钥。中心 SSH 配置中的远端路径应填入这份只读副本。
 
 ## 2. SSH 密钥及主机公钥指纹
 
@@ -37,7 +37,7 @@
 9. 手动同步所有节点；10. 同步单个节点。
 8. 列出子节点与最近同步时间；3. 移除节点；5. 主动刷新中心 Token。
 
-修改子节点 Xray 配置后，先在子节点重新生成本地 YAML 并更新同步账户只读副本；随后在中心手动同步并在客户端刷新订阅。没有定时 SSH 拉取、没有中心向子节点推送。验证通过的远端快照缓存在中心私有目录；单节点同步失败时继续使用最近有效缓存。静态输出 multi_clash.yaml 含完整节点及原有规则集，multi_nodes.txt 是 Shadowrocket base64 VLESS 链接列表。
+修改子节点 Xray 配置后，先在子节点重新生成本地 YAML（会自动更新已配置的只读 SFTP 副本）；随后在中心手动同步并在客户端刷新订阅。没有定时 SSH 拉取、没有中心向子节点推送。验证通过的远端快照缓存在中心私有目录；单节点同步失败时继续使用最近有效缓存。静态输出 multi_clash.yaml 含完整节点及原有规则集，multi_nodes.txt 是 Shadowrocket base64 VLESS 链接列表。
 
 ## 4. Dynu HTTPS 与证书
 
