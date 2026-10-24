@@ -849,6 +849,13 @@ function apply_xray_config() {
 
     if [[ "${context}" == xray:regenerate* ]]; then
         clear_pending_script_config
+        # Refresh local-only subscription snapshots immediately after a valid
+        # Xray configuration is applied. Never fail/revert a running Xray
+        # because a separate subscription file cannot be regenerated.
+        if [[ -s "${SCRIPT_CONFIG_DIR}/clash/clash.yaml" && -f "${CLASH_PATH}" ]]; then
+            bash "${CLASH_PATH}" generate ||
+                printf '%s\n' 'WARN: Xray updated but local subscription refresh failed; use menu 10 -> 1.' >&2
+        fi
     fi
 }
 
