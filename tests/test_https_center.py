@@ -48,12 +48,12 @@ class HttpsManagerTests(unittest.TestCase):
 
     def test_issue_failure_keeps_previous_method(self):
         https.save_secure(self.base / "https-certificate.json",
-                          {"domain": "myhost.dynu.net", "method": "dns"})
+                          {"domain": "myhost.dynu.net", "method": "http"})
         with patch.object(https, "acme_bin", return_value="/mock/acme.sh"), \
              patch.object(https, "run", side_effect=RuntimeError("failed")):
             with self.assertRaises(RuntimeError):
-                https.issue(self.base, "http", "myhost.dynu.net")
-        self.assertEqual(json.loads((self.base / "https-certificate.json").read_text())["method"], "dns")
+                https.issue(self.base, "dns", "myhost.dynu.net")
+        self.assertEqual(json.loads((self.base / "https-certificate.json").read_text())["method"], "http")
 
     def test_443_conflict_refused_before_systemd_change(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
