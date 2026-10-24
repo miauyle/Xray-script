@@ -279,10 +279,13 @@ multi_sync() {
         printf 'Peer label or all [all]: ' >&2; read -r name
     fi
     name="${name:-all}"
-    python3 "${SSH_HELPER}" --config "${SSH_CONFIG_PATH}" --single "${CLASH_CONFIG_PATH}" \
+    if ! python3 "${SSH_HELPER}" --config "${SSH_CONFIG_PATH}" --single "${CLASH_CONFIG_PATH}" \
         --local "${PROVIDER_YAML_PATH}" --cache-dir "${SSH_CACHE_DIR}" \
         --multi "${MULTI_YAML_PATH}" --shadowrocket "${SHADOWROCKET_NODES_PATH}" \
-        sync "$name" || warn "Some peers failed; last validated snapshots remain in place."
+        sync "$name"; then
+        warn "One or more sync operations failed; existing snapshots retained."
+        return 1
+    fi
 }
 multi_ssh_test() {
     multi_ssh_enabled || fail "Enable SSH center first."
