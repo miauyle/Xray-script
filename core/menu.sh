@@ -446,6 +446,7 @@ function menu_clash_subscription() {
     echo -e "${GREEN}5.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.clash_subscription.option5")"
     echo -e "${GREEN}6.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.clash_subscription.option6")"
     echo -e "${GREEN}7.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.clash_subscription.option7")"
+    echo -e "${GREEN}8.${NC} $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.clash_subscription.option8")"
     echo -e "------------------------------------------------------"
     echo -e "1. $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.clash_subscription.info1")"
     echo -e "2. $(echo "$I18N_DATA" | jq -r ".${CUR_FILE}.clash_subscription.info2")"
