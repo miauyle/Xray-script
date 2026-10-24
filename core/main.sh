@@ -584,6 +584,11 @@ function processes_clash_multi() {
     6) exec_handler '--clash' 'multi-disable' ;;
     7) exec_handler '--clash' 'multi-doctor' ;;
     8) exec_handler '--clash' 'multi-list' ;;
+    9) exec_handler '--clash' 'multi-sync' 'all' ;;
+    10) exec_handler '--clash' 'multi-sync' ;;
+    11) exec_handler '--clash' 'multi-test' ;;
+    12) exec_handler '--clash' 'multi-https' ;;
+    13) exec_handler '--clash' 'multi-audit' ;;
     *) return 0 ;;
     esac
 }
@@ -598,6 +603,7 @@ function processes_clash_subscription() {
     4) exec_handler '--clash' 'rotate' ;;
     5) exec_handler '--clash' 'disable' ;;
     6) processes_clash_multi ;;
+    7) exec_handler '--clash' 'private' ;;
     *) return 0 ;;
     esac
 }
