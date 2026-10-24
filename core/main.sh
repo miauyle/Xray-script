@@ -604,6 +604,7 @@ function processes_clash_subscription() {
     5) exec_handler '--clash' 'disable' ;;
     6) processes_clash_multi ;;
     7) exec_handler '--clash' 'private' ;;
+    8) exec_handler '--clash' 'export-setup' ;;
     *) return 0 ;;
     esac
 }
